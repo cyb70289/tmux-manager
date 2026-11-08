@@ -2,8 +2,13 @@ import AppKit
 import TmuxManagerCore
 
 enum Debug {
-    /// Enabled with `--debug`; also turns on the distributed-notification test hook.
+    /// Enabled with `--debug` or by creating the flag file; also turns on the
+    /// distributed-notification test hook.
     static var enabled = false
+
+    static var flagPath: URL {
+        Paths.default.supportDir.appendingPathComponent("debug")
+    }
 }
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
@@ -20,6 +25,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         Debug.enabled = CommandLine.arguments.contains("--debug")
+            || FileManager.default.fileExists(atPath: Debug.flagPath.path)
         NSApp.mainMenu = MainMenu.build()
 
         model = AppModel()
@@ -43,7 +49,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         barWindow.isReleasedWhenClosed = false
 
         model.start()
-        if CommandLine.arguments.contains("--debug") {
+        if Debug.enabled {
             debugHook = DebugHook(model: model)
         }
         refreshBar(initial: true)
@@ -113,11 +119,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                            y: visible.maxY - size.height - 20,
                            width: size.width, height: size.height)
         } else {
-            // Keep the top-right corner anchored while the bar grows or shrinks.
+            // Keep the right edge anchored while the bar grows or shrinks; if it no
+            // longer fits, slide it right so the bar stays fully on screen.
             let top = frame.maxY
             let right = frame.maxX
             frame.size = size
             frame.origin = NSPoint(x: right - size.width, y: top - size.height)
+            if frame.minX < visible.minX {
+                frame.origin.x = visible.minX
+            }
         }
 
         frame = clampBarFrame(frame, visible: visible)
@@ -144,7 +154,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let maxX = rects.map { $0.x + $0.w }.max() ?? visible.maxX
         let minY = rects.map(\.y).min() ?? 0
         let maxY = rects.map { $0.y + $0.h }.max() ?? visible.maxY
-        frame.origin.x = min(max(frame.origin.x, minX - 40), maxX - frame.width + 40)
+        frame.origin.x = min(max(frame.origin.x, minX), maxX - frame.width)
         frame.origin.y = min(max(frame.origin.y, minY), maxY - frame.height)
         return frame
     }

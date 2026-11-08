@@ -4,6 +4,8 @@ import TmuxManagerCore
 /// One capsule in the bar: gray when the console is closed, green when it is open.
 final class EntryButton: NSControl {
     private static let labelFont = NSFont.systemFont(ofSize: 13, weight: .bold)
+    /// Capsule labels are hard-capped: longer names are cut, never ellipsized.
+    private static let labelCharLimit = 10
     private(set) var entry: Entry
     var isActive: Bool = false { didSet { applyState() } }
     var isBusy: Bool = false { didSet { applyState() } }
@@ -36,7 +38,7 @@ final class EntryButton: NSControl {
         layer?.borderWidth = 1
 
         title.font = Self.labelFont
-        title.lineBreakMode = .byTruncatingTail
+        title.lineBreakMode = .byClipping
         title.textColor = NSColor.labelColor
         title.isEditable = false
         title.isBordered = false
@@ -63,7 +65,7 @@ final class EntryButton: NSControl {
         reconnectButton.toolTip = "Force reconnect (ssh is restarted, the window stays)"
         addSubview(reconnectButton)
 
-        toolTip = entry.address
+        toolTip = Self.tooltip(for: entry)
         applyState()
     }
 
@@ -71,23 +73,32 @@ final class EntryButton: NSControl {
 
     func update(entry: Entry) {
         self.entry = entry
-        toolTip = entry.address
+        toolTip = Self.tooltip(for: entry)
         applyState()
         invalidateIntrinsicContentSize()
         needsLayout = true
+    }
+
+    private static func tooltip(for entry: Entry) -> String {
+        entry.displayName == entry.address ? entry.address : "\(entry.displayName) — \(entry.address)"
     }
 
     // MARK: - Sizing
 
     /// Measured directly instead of via the label's intrinsic size, which is stale
     /// before the first layout pass.
+    /// The name as shown on the capsule: at most `labelCharLimit` characters.
+    private var labelText: String {
+        String(entry.displayName.prefix(Self.labelCharLimit))
+    }
+
     private var measuredTextWidth: CGFloat {
         let font = title.font ?? Self.labelFont
-        return ceil((entry.displayName as NSString).size(withAttributes: [.font: font]).width)
+        return ceil((labelText as NSString).size(withAttributes: [.font: font]).width)
     }
 
     override var intrinsicContentSize: NSSize {
-        var width = horizontalPadding * 2 + 7 + 7 + measuredTextWidth + 2
+        var width = horizontalPadding * 2 + 7 + 7 + measuredTextWidth + 8
         if isActive { width += 22 }
         if isBusy { width += 18 }
         return NSSize(width: width, height: height)
@@ -116,7 +127,7 @@ final class EntryButton: NSControl {
     // MARK: - State
 
     private func applyState() {
-        title.stringValue = entry.displayName
+        title.stringValue = labelText
         if isActive {
             layer?.backgroundColor = NSColor.systemGreen.withAlphaComponent(hovered ? 0.38 : 0.26).cgColor
             layer?.borderColor = NSColor.systemGreen.withAlphaComponent(0.85).cgColor
