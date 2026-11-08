@@ -2,7 +2,7 @@
 // Usage: osascript -l JavaScript tools/post-debug.js <action> [value] [kill]
 //   open|reconnect|remove <entry-uuid> [1]
 //   add <entry-json>
-//   sheet | closesheet | reload | capture | windows
+//   sheet | closesheet (aliases: editor | closeeditor) | reload | capture | windows
 //   sizebar <x> <y> <w> <h>
 function run(argv) {
     ObjC.import('Foundation');

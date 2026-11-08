@@ -157,6 +157,42 @@ final class CoreTests: XCTestCase {
         XCTAssertEqual(clamped.x, 1440 + 1920 - 800)
     }
 
+    // MARK: bar placement
+
+    func testBarGrowsLeftwardsFromPinnedRightEdge() {
+        let visible = ScreenRect(x: 65, y: 0, w: 1645, h: 1073)
+        let anchor = BarAnchor(right: 1710, top: 1073)
+        let small = BarPlacement.frame(width: 270, height: 44, anchor: anchor, visible: visible)
+        let large = BarPlacement.frame(width: 500, height: 44, anchor: anchor, visible: visible)
+        XCTAssertEqual(small.x + small.w, 1710)
+        XCTAssertEqual(large.x + large.w, 1710, "right edge must not move when the bar grows")
+        XCTAssertEqual(large.x, 1210)
+        XCTAssertEqual(small.y, 1029)
+        XCTAssertEqual(large.y, 1029, "top edge must not move either")
+    }
+
+    func testBarShrinksTowardsPinnedRightEdge() {
+        let visible = ScreenRect(x: 65, y: 0, w: 1645, h: 1073)
+        let anchor = BarAnchor(right: 1710, top: 1073)
+        let shrunk = BarPlacement.frame(width: 120, height: 44, anchor: anchor, visible: visible)
+        XCTAssertEqual(shrunk.x, 1590)
+        XCTAssertEqual(shrunk.x + shrunk.w, 1710)
+    }
+
+    func testBarStopsAtLeftScreenEdge() {
+        let visible = ScreenRect(x: 65, y: 0, w: 1645, h: 1073)
+        let anchor = BarAnchor(right: 1710, top: 1073)
+        let wide = BarPlacement.frame(width: 1700, height: 44, anchor: anchor, visible: visible)
+        XCTAssertEqual(wide.x, 65, "a bar that no longer fits stays fully on screen")
+        XCTAssertEqual(wide.w, 1700)
+    }
+
+    func testAnchorFromFrameUsesTopRightCorner() {
+        let anchor = BarAnchor(topRightOf: ScreenRect(x: 1440, y: 1029, w: 270, h: 44))
+        XCTAssertEqual(anchor.right, 1710)
+        XCTAssertEqual(anchor.top, 1073)
+    }
+
     // MARK: config round trip
 
     func testConfigRoundTrip() throws {

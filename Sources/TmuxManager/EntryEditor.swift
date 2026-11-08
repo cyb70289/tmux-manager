@@ -1,8 +1,13 @@
 import AppKit
 import TmuxManagerCore
 
-/// Add / edit sheet.
-final class EntryEditor {
+/// Add / edit window.
+///
+/// Deliberately not a sheet on the bar: AppKit centers a sheet on its parent and
+/// slides the parent left to keep the sheet on screen. The bar is small and pinned
+/// to the right screen edge, so that shift moved the bar away from its pin and the
+/// moved position was then reused as the new pin.
+final class EntryEditor: NSObject, NSWindowDelegate {
     private static var active: EntryEditor?
 
     private let model: AppModel
@@ -18,27 +23,34 @@ final class EntryEditor {
     private let statusLabel = NSTextField(labelWithString: "")
     private let testButton = NSButton(title: "Test", target: nil, action: nil)
     private let saveButton = NSButton(title: "Save", target: nil, action: nil)
-    private var parent: NSWindow?
 
     private init(model: AppModel, entry: Entry?) {
         self.model = model
         self.original = entry
+        super.init()
     }
 
-    static func present(entry: Entry?, model: AppModel, on parent: NSWindow) {
+    static func present(entry: Entry?, model: AppModel, near bar: NSWindow?) {
+        active?.window?.close()
         let editor = EntryEditor(model: model, entry: entry)
-        editor.show(on: parent)
+        editor.show(near: bar)
         active = editor
+    }
+
+    static func closeActive() {
+        active?.window?.close()
     }
 
     // MARK: - Building
 
-    private func show(on parent: NSWindow) {
-        self.parent = parent
+    private func show(near bar: NSWindow?) {
         window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 540, height: 400),
-                          styleMask: [.titled],
+                          styleMask: [.titled, .closable],
                           backing: .buffered, defer: false)
         window.title = original == nil ? "Add Host:Session" : "Edit \(original!.displayName)"
+        window.isReleasedWhenClosed = false
+        window.level = .floating
+        window.delegate = self
 
         let content = NSView()
         window.contentView = content
@@ -106,10 +118,35 @@ final class EntryEditor {
 
         fill(from: original)
         window.defaultButtonCell = saveButton.cell as? NSButtonCell
-        parent.beginSheet(window) { _ in
-            EntryEditor.active = nil
-        }
+        place(near: bar)
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
         window.makeFirstResponder(hostField)
+    }
+
+    /// Drops the window just below the bar, right edges aligned, clamped on screen.
+    /// The bar itself is never moved.
+    private func place(near bar: NSWindow?) {
+        guard let screen = bar?.screen ?? NSScreen.main ?? NSScreen.screens.first else {
+            window.center()
+            return
+        }
+        let visible = screen.visibleFrame
+        let size = window.frame.size
+        let origin: NSPoint
+        if let bar {
+            origin = NSPoint(x: bar.frame.maxX - size.width, y: bar.frame.minY - 8 - size.height)
+        } else {
+            origin = NSPoint(x: visible.midX - size.width / 2, y: visible.midY - size.height / 2)
+        }
+        window.setFrameOrigin(NSPoint(x: min(max(origin.x, visible.minX),
+                                           max(visible.minX, visible.maxX - size.width)),
+                                      y: min(max(origin.y, visible.minY),
+                                           max(visible.minY, visible.maxY - size.height))))
+    }
+
+    func windowWillClose(_ notification: Notification) {
+        if EntryEditor.active === self { EntryEditor.active = nil }
     }
 
     private func label(_ text: String) -> NSTextField {
@@ -223,7 +260,6 @@ final class EntryEditor {
     }
 
     private func close() {
-        guard let parent else { return }
-        parent.endSheet(window)
+        window.close()
     }
 }

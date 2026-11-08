@@ -352,7 +352,7 @@ final class BarView: NSVisualEffectView {
 
     private func editEntry(_ entry: Entry) {
         guard let model, let window else { return }
-        EntryEditor.present(entry: entry, model: model, on: window)
+        EntryEditor.present(entry: entry, model: model, near: window)
     }
 
     private func removeEntry(_ entry: Entry) {

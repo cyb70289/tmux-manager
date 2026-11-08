@@ -24,7 +24,7 @@ The first AppleScript call triggers macOS Automation permission for iTerm2. Ad-h
 - Hover a green button → `⟳` restarts ssh in the same window. Right-click → activate / reconnect / close / edit / remove.
 - `Close Console` (right-click, only while the console is open) reads the window's current position/size, saves it immediately, then closes the window. The remote tmux session survives. This is the frame-accurate way to close: unlike the traffic-light `×`, nothing is lost even if the window was moved/resized seconds ago.
 - Removing asks whether to also kill the remote tmux session (unchecked by default).
-- Buttons are ordered by name; the bar is draggable and remembers its position. Per-entry window frames are captured while a console is open and restored on the next open, clamped to the visible screens.
+- Buttons are ordered by name; the bar is draggable and remembers its position. Its right edge is pinned: adding, editing or opening an entry grows the bar to the left, and it only slides right again when it would no longer fit on screen. Per-entry window frames are captured while a console is open and restored on the next open, clamped to the visible screens.
 
 ## How it works
 
@@ -94,7 +94,7 @@ Frames use AppleScript `bounds` space: top-left origin, y growing downward from 
 | `Sources/TmuxManager/AppModel.swift` | orchestration: open/activate/reconnect/add/edit/remove, timers |
 | `Sources/TmuxManager/TerminalController.swift` | osascript calls to iTerm2, launch and profile recovery |
 | `Sources/TmuxManager/BarUI.swift` | bar window/view, entry capsule, context menu |
-| `Sources/TmuxManager/EntryEditor.swift` | add/edit sheet |
+| `Sources/TmuxManager/EntryEditor.swift` | add/edit window (not a sheet: a sheet would push the bar off its pin) |
 | `Resources/attach.sh` | the wrapper |
 
 ## Gotchas

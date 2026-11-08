@@ -16,6 +16,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var debugHook: DebugHook?
     private var originTimer: Timer?
     private var lastSeenOrigin: NSPoint?
+    /// Corner the bar is pinned to. Only a real move changes it; content changes and
+    /// clamping keep it, so resizing can never walk the bar across the screen.
+    private var anchor: BarAnchor?
+    /// Set while the app moves the bar itself, so the resulting move is not read back
+    /// as a user placement.
+    private var applyingFrame = false
     /// False until the first placement is done, so early repaints cannot save a bogus origin.
     private var ready = false
     private var barWindow: BarWindow!
@@ -90,7 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc func addEntry() {
         showBar()
-        EntryEditor.present(entry: nil, model: model, on: barWindow)
+        EntryEditor.present(entry: nil, model: model, near: barWindow)
     }
 
     // MARK: - Bar geometry
@@ -110,32 +116,48 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         let size = barView.fittingBarSize(maxWidth: max(200, visible.width - 40))
 
         var frame = barWindow.frame
-        let placed = initial && model.barOrigin != nil
-        if placed {
-            frame.origin = NSPoint(x: model.barOrigin!.x, y: model.barOrigin!.y)
-            frame.size = size
-        } else if initial {
-            frame = NSRect(x: visible.maxX - size.width - 20,
-                           y: visible.maxY - size.height - 20,
-                           width: size.width, height: size.height)
-        } else {
-            // Keep the right edge anchored while the bar grows or shrinks; if it no
-            // longer fits, slide it right so the bar stays fully on screen.
-            let top = frame.maxY
-            let right = frame.maxX
-            frame.size = size
-            frame.origin = NSPoint(x: right - size.width, y: top - size.height)
-            if frame.minX < visible.minX {
-                frame.origin.x = visible.minX
+        frame.size = size
+        if initial {
+            if let origin = model.barOrigin {
+                // The stored origin is the bar's left edge; the pin is its right edge.
+                frame.origin = NSPoint(x: origin.x, y: origin.y)
+            } else {
+                frame.origin = NSPoint(x: visible.maxX - size.width - 20,
+                                       y: visible.maxY - size.height - 20)
             }
+            anchor = BarAnchor(topRightOf: ScreenRect(x: frame.minX, y: frame.minY,
+                                                      w: frame.width, h: frame.height))
+        }
+        if let anchor {
+            // Keep the pinned corner: the bar grows leftwards. If it no longer fits,
+            // it slides right so the left edge stays on screen.
+            let placed = BarPlacement.frame(width: size.width,
+                                            height: size.height,
+                                            anchor: anchor,
+                                            visible: ScreenRect(x: visible.minX, y: visible.minY,
+                                                                w: visible.width, h: visible.height))
+            frame = NSRect(x: placed.x, y: placed.y, width: placed.w, height: placed.h)
         }
 
         frame = clampBarFrame(frame, visible: visible)
-        barWindow.setFrame(frame, display: true)
+        setBarFrame(frame)
         if Debug.enabled {
-            Log.shared.write("bar set=\(frame) actual=\(barWindow.frame)")
+            Log.shared.write("bar set=\(frame) anchor=\(anchorText) actual=\(barWindow.frame)")
         }
+    }
 
+    /// Right/top of the pin, for the debug log.
+    private var anchorText: String {
+        guard let anchor else { return "none" }
+        return "\(anchor.right),\(anchor.top)"
+    }
+
+    /// Moves the bar without recording the move as the user's placement.
+    private func setBarFrame(_ frame: NSRect) {
+        applyingFrame = true
+        barWindow.setFrame(frame, display: true)
+        applyingFrame = false
+        lastSeenOrigin = barWindow.frame.origin
     }
 
     private func clampBarFrame(_ frame: NSRect, visible: NSRect) -> NSRect {
@@ -160,7 +182,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applyDebugFrame(_ frame: NSRect) {
-        barWindow.setFrame(frame, display: true)
+        setBarFrame(frame)
+        anchor = BarAnchor(topRightOf: ScreenRect(x: barWindow.frame.minX, y: barWindow.frame.minY,
+                                                  w: barWindow.frame.width, h: barWindow.frame.height))
         Log.shared.write("debug frame set=\(frame) actual=\(barWindow.frame)")
     }
 
@@ -177,13 +201,13 @@ extension AppDelegate: NSWindowDelegate {
     /// Delegate notifications are not reliable for every kind of move, so the origin
     /// is also sampled once a second.
     private func sampleBarOrigin() {
-        guard ready, let model, let barWindow else { return }
+        guard ready, let model, let barWindow, !applyingFrame else { return }
         let origin = barWindow.frame.origin
         guard origin != lastSeenOrigin else { return }
         lastSeenOrigin = origin
-        if Debug.enabled { Log.shared.write("bar moved to \(origin)") }
+        anchor = BarAnchor(right: barWindow.frame.maxX, top: barWindow.frame.maxY)
+        if Debug.enabled { Log.shared.write("bar moved to \(origin) anchor=\(anchorText)") }
         model.setBarOrigin(BarOrigin(x: origin.x, y: origin.y))
-        lastSeenOrigin = barWindow.frame.origin
     }
 }
 

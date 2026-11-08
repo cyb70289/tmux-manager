@@ -35,18 +35,14 @@ final class DebugHook {
             _ = model.add(entry, thenProbe: true)
             return
         }
-        if action == "sheet" {
+        if action == "sheet" || action == "editor" {
             if let bar = NSApp.windows.first(where: { $0 is BarWindow }) {
-                EntryEditor.present(entry: nil, model: model, on: bar)
+                EntryEditor.present(entry: nil, model: model, near: bar)
             }
             return
         }
-        if action == "closesheet" {
-            for window in NSApp.windows {
-                if let parent = window.sheetParent {
-                    parent.endSheet(window)
-                }
-            }
+        if action == "closesheet" || action == "closeeditor" {
+            EntryEditor.closeActive()
             return
         }
         if action == "windows" {
