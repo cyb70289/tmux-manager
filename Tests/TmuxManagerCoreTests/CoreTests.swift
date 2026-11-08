@@ -82,6 +82,29 @@ final class CoreTests: XCTestCase {
                        "{1, 3, 11, 23}")
     }
 
+    // MARK: iTerm2 profile
+
+    func testDynamicProfileInheritsActualDefault() throws {
+        let root = try XCTUnwrap(JSONSerialization.jsonObject(with: Data(ProfileInstaller.json.utf8))
+            as? [String: Any])
+        let profiles = try XCTUnwrap(root["Profiles"] as? [[String: Any]])
+        XCTAssertEqual(profiles.count, 1)
+        let profile = try XCTUnwrap(profiles.first)
+
+        // An explicit parent named "Default" breaks inheritance when the user's
+        // default is renamed (e.g. "Local"). No parent keys means the actual default.
+        XCTAssertNil(profile["Dynamic Profile Parent Name"])
+        XCTAssertNil(profile["Dynamic Profile Parent GUID"])
+        XCTAssertEqual(profile["Name"] as? String, AppleScripts.profileName)
+        XCTAssertEqual(profile["Guid"] as? String, "B7F2B9C6-4E0B-4E9B-9C4B-2A6D0F1E3A55")
+        XCTAssertEqual(profile["Close Sessions On End"] as? Bool, true)
+        XCTAssertEqual(profile["Prompt Before Closing 2"] as? Bool, false)
+        // Fonts, colors, encoding and locale must all remain inherited.
+        XCTAssertEqual(Set(profile.keys), Set([
+            "Name", "Guid", "Close Sessions On End", "Prompt Before Closing 2",
+        ]))
+    }
+
     // MARK: frames
 
     func testSessionFrameParsing() {

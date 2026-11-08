@@ -2,7 +2,7 @@ import Foundation
 
 /// AppleScript sources used by the app. Kept as pure string builders so they are testable.
 public enum AppleScripts {
-    public static let profileName = "TmuxManager"
+    public static let profileName = ProfileInstaller.profileName
 
     /// Creates one console window and (optionally) applies a saved frame.
     public static func createWindow(attachScript: String,

@@ -55,7 +55,7 @@ While any console is open, the app polls iTerm2 for window bounds in-process (`N
 
 ### iTerm2 profile
 
-`~/Library/Application Support/iTerm2/DynamicProfiles/TmuxManager.json` is written at launch: a partial profile inheriting `Default`, with "Close Sessions On End" and no prompt before closing. Do not rename it; `TerminalController` recreates it if iTerm2 forgets the profile.
+`~/Library/Application Support/iTerm2/DynamicProfiles/TmuxManager.json` is written at launch: a partial profile inheriting your **current default iTerm2 profile**, regardless of its name, including fonts, colors, encoding and locale settings. Only "Close Sessions On End" and the close prompt are overridden. No explicit parent is set: a profile named `Default` need not exist. Do not rename the generated profile; `TerminalController` recreates it if iTerm2 forgets it. Close and reopen existing consoles to apply profile changes; reconnect only restarts ssh.
 
 ## Files
 
@@ -88,10 +88,11 @@ Frames use AppleScript `bounds` space: top-left origin, y growing downward from 
 | `Sources/TmuxManagerCore/ConfigStore.swift` | atomic load/save, env-file generation, file watcher |
 | `Sources/TmuxManagerCore/StateStore.swift` | wrapper state files, pid→argv validation |
 | `Sources/TmuxManagerCore/AppleScripts.swift` | AppleScript builders + frame-line parser |
+| `Sources/TmuxManagerCore/ProfileInstaller.swift` | dynamic profile inheriting iTerm2's default settings |
 | `Sources/TmuxManagerCore/FrameClamp.swift` | on-screen clamping and coordinate conversion |
 | `Sources/TmuxManagerCore/Shell.swift` | subprocess helper, `osascript`, ssh probe |
 | `Sources/TmuxManager/AppModel.swift` | orchestration: open/activate/reconnect/add/edit/remove, timers |
-| `Sources/TmuxManager/TerminalController.swift` | osascript calls to iTerm2, dynamic profile |
+| `Sources/TmuxManager/TerminalController.swift` | osascript calls to iTerm2, launch and profile recovery |
 | `Sources/TmuxManager/BarUI.swift` | bar window/view, entry capsule, context menu |
 | `Sources/TmuxManager/EntryEditor.swift` | add/edit sheet |
 | `Resources/attach.sh` | the wrapper |
