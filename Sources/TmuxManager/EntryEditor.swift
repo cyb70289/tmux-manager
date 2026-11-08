@@ -148,7 +148,7 @@ final class EntryEditor {
 
     private func fill(from entry: Entry?) {
         guard let entry else {
-            detachBox.state = .off
+            detachBox.state = .on
             return
         }
         nameField.stringValue = entry.name ?? ""

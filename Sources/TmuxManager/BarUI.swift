@@ -3,6 +3,7 @@ import TmuxManagerCore
 
 /// One capsule in the bar: gray when the console is closed, green when it is open.
 final class EntryButton: NSControl {
+    private static let labelFont = NSFont.systemFont(ofSize: 13, weight: .bold)
     private(set) var entry: Entry
     var isActive: Bool = false { didSet { applyState() } }
     var isBusy: Bool = false { didSet { applyState() } }
@@ -22,7 +23,7 @@ final class EntryButton: NSControl {
     private let height: CGFloat = 26
 
     private var titleHeight: CGFloat {
-        let font = title.font ?? NSFont.systemFont(ofSize: 12, weight: .medium)
+        let font = title.font ?? Self.labelFont
         return ceil(font.ascender - font.descender + font.leading)
     }
     private let horizontalPadding: CGFloat = 11
@@ -34,9 +35,9 @@ final class EntryButton: NSControl {
         layer?.cornerRadius = height / 2
         layer?.borderWidth = 1
 
-        title.font = .systemFont(ofSize: 12, weight: .medium)
+        title.font = Self.labelFont
         title.lineBreakMode = .byTruncatingTail
-        title.textColor = NSColor.white.withAlphaComponent(0.92)
+        title.textColor = NSColor.labelColor
         title.isEditable = false
         title.isBordered = false
         title.drawsBackground = false
@@ -56,7 +57,7 @@ final class EntryButton: NSControl {
         reconnectButton.imagePosition = .imageOnly
         reconnectButton.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath",
                                         accessibilityDescription: "Reconnect")
-        reconnectButton.contentTintColor = NSColor.white.withAlphaComponent(0.85)
+        reconnectButton.contentTintColor = NSColor.labelColor
         reconnectButton.target = self
         reconnectButton.action = #selector(reconnectClicked)
         reconnectButton.toolTip = "Force reconnect (ssh is restarted, the window stays)"
@@ -81,7 +82,7 @@ final class EntryButton: NSControl {
     /// Measured directly instead of via the label's intrinsic size, which is stale
     /// before the first layout pass.
     private var measuredTextWidth: CGFloat {
-        let font = title.font ?? NSFont.systemFont(ofSize: 12, weight: .medium)
+        let font = title.font ?? Self.labelFont
         return ceil((entry.displayName as NSString).size(withAttributes: [.font: font]).width)
     }
 
@@ -121,9 +122,9 @@ final class EntryButton: NSControl {
             layer?.borderColor = NSColor.systemGreen.withAlphaComponent(0.85).cgColor
             dot.layer?.backgroundColor = NSColor.systemGreen.cgColor
         } else {
-            layer?.backgroundColor = NSColor.white.withAlphaComponent(hovered ? 0.16 : 0.08).cgColor
-            layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
-            dot.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.35).cgColor
+            layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(hovered ? 0.16 : 0.08).cgColor
+            layer?.borderColor = NSColor.labelColor.withAlphaComponent(0.18).cgColor
+            dot.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.45).cgColor
         }
         reconnectButton.isHidden = !(isActive && hovered)
         reconnectButton.alphaValue = hovered ? 1 : 0
@@ -233,7 +234,7 @@ final class BarView: NSVisualEffectView {
         addButton.isBordered = false
         addButton.bezelStyle = .inline
         addButton.imagePosition = .imageOnly
-        addButton.contentTintColor = NSColor.white.withAlphaComponent(0.85)
+        addButton.contentTintColor = NSColor.labelColor
         addButton.toolTip = "Add host:session"
         addButton.target = self
         addButton.action = #selector(addClicked)
@@ -344,7 +345,7 @@ final class BarView: NSVisualEffectView {
             : "This only removes the entry from the bar."
         let killBox = NSButton(checkboxWithTitle: "Also kill the remote tmux session (\(entry.session))",
                                target: nil, action: nil)
-        killBox.state = .off
+        killBox.state = .on
         alert.accessoryView = killBox
         alert.addButton(withTitle: "Remove")
         alert.addButton(withTitle: "Cancel")

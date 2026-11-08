@@ -119,6 +119,10 @@ final class AppModel {
     // MARK: - Operations
 
     func open(_ entry: Entry) {
+        // Always use the newest stored entry: the bar button may hold a stale copy
+        // (frame flushes do not trigger a UI rebuild), and the restore frame must
+        // come from current config.
+        let entry = config.entry(id: entry.id) ?? entry
         guard !busy.contains(entry.id) else { return }
         if let state = states[entry.id], let guid = state.itermSessionID, !guid.isEmpty {
             controller.activate(guid: guid) { [weak self] found in
@@ -175,6 +179,7 @@ final class AppModel {
     }
 
     func reconnect(_ entry: Entry) {
+        let entry = config.entry(id: entry.id) ?? entry
         guard let state = states[entry.id] else { return }
         captureFrames()
         flushFrames()
@@ -337,6 +342,8 @@ final class AppModel {
         let work = DispatchWorkItem { [weak self] in self?.save() }
         frameSaveWork = work
         DispatchQueue.main.asyncAfter(deadline: .now() + 2, execute: work)
+        // Refresh the bar so entry snapshots (e.g. saved frames) stay current.
+        onChange?()
     }
 
     // MARK: - State / config plumbing
