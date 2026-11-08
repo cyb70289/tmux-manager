@@ -1,0 +1,163 @@
+import AppKit
+import TmuxManagerCore
+
+/// Talks to iTerm2. Window creation/activation go through `osascript` on a private
+/// queue so the UI never blocks; the frequent frame poll runs in-process.
+final class TerminalController {
+    private let paths: Paths
+    private let queue = DispatchQueue(label: "com.cyb.tmuxmanager.iterm", qos: .userInitiated)
+    private var frameScript: NSAppleScript?
+    private let iTermBundleID = "com.googlecode.iterm2"
+
+    init(paths: Paths) {
+        self.paths = paths
+    }
+
+    // MARK: - Windows
+
+    func createWindow(entry: Entry,
+                      frame: Frame?,
+                      completion: @escaping (Result<Void, NSError>) -> Void) {
+        queue.async { [paths] in
+            Self.ensureITermRunning()
+            let script = AppleScripts.createWindow(attachScript: paths.attachScriptURL.path,
+                                                   entryID: entry.id,
+                                                   frame: frame)
+            var result = Shell.osascript(script, timeout: 25)
+            if result.status != 0, Self.isMissingProfile(result) {
+                Log.shared.write("iTerm2 lost the TmuxManager profile; rewriting it")
+                ProfileInstaller.install()
+                result = Shell.osascript(script, timeout: 25)
+            }
+            if result.status == 0 {
+                Log.shared.write("created window for \(entry.address)")
+                DispatchQueue.main.async { completion(.success(())) }
+            } else {
+                let message = Self.describe(result, context: "Could not open a console window")
+                Log.shared.write("create window failed: \(message)")
+                DispatchQueue.main.async {
+                    completion(.failure(NSError(domain: "TmuxManager", code: 1,
+                                                userInfo: [NSLocalizedDescriptionKey: message])))
+                }
+            }
+        }
+    }
+
+    /// Returns true when the window owning `guid` was found and raised.
+    func activate(guid: String, completion: @escaping (Bool) -> Void) {
+        queue.async {
+            let result = Shell.osascript(AppleScripts.activateSession(guid: guid), timeout: 15)
+            let found = result.status == 0
+                && result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "true"
+            if result.status != 0 {
+                Log.shared.write("activate failed: \(Self.describe(result, context: "activate"))")
+            }
+            DispatchQueue.main.async { completion(found) }
+        }
+    }
+
+    func closeWindow(guid: String) {
+        queue.async {
+            let result = Shell.osascript(AppleScripts.closeSessionWindow(guid: guid), timeout: 15)
+            if result.status != 0 {
+                Log.shared.write("close failed: \(Self.describe(result, context: "close"))")
+            }
+        }
+    }
+
+    /// Synchronous and cheap (in-process Apple Event); called from the main thread timer.
+    func frames() -> [SessionFrame] {
+        if frameScript == nil {
+            frameScript = NSAppleScript(source: AppleScripts.sessionFrames())
+        }
+        guard let script = frameScript else { return [] }
+        var error: NSDictionary?
+        let result = script.executeAndReturnError(&error)
+        if let error {
+            let number = error[NSAppleScript.errorNumber] as? Int ?? 0
+            if number != -1743 { // -1743: pending/user-denied Automation permission; stay quiet
+                Log.shared.write("frame poll failed: \(error)")
+                frameScript = nil
+            }
+            return []
+        }
+        return SessionFrameParser.parse(result.stringValue ?? "")
+    }
+
+    // MARK: - Helpers
+
+    static func ensureITermRunning() {
+        let running = NSRunningApplication.runningApplications(withBundleIdentifier: "com.googlecode.iterm2")
+        guard running.isEmpty else { return }
+        Log.shared.write("iTerm2 is not running; launching it")
+        let task = Process()
+        task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+        task.arguments = ["-b", "com.googlecode.iterm2"]
+        try? task.run()
+        task.waitUntilExit()
+        for _ in 0..<40 {
+            if !NSRunningApplication.runningApplications(withBundleIdentifier: "com.googlecode.iterm2").isEmpty,
+               Shell.osascript("tell application \"iTerm2\" to get version", timeout: 3).status == 0 {
+                return
+            }
+            usleep(150_000)
+        }
+    }
+
+    static func isMissingProfile(_ result: CommandResult) -> Bool {
+        result.stderr.lowercased().contains("no profile exists")
+    }
+
+    static func describe(_ result: CommandResult, context: String) -> String {
+        let text = result.combined
+        if text.contains("-1743") || text.lowercased().contains("not authorized to send apple events") {
+            return "\(context): macOS blocked sending Apple Events to iTerm2. "
+                + "Allow TmuxManager under System Settings → Privacy & Security → Automation, then try again."
+        }
+        if text.contains("isn't running") || text.contains("-600") {
+            return "\(context): iTerm2 is not running and could not be launched."
+        }
+        return text.isEmpty ? "\(context): osascript exited with status \(result.status)" : text
+    }
+}
+
+/// Writes the dynamic profile iTerm2 loads for console windows.
+enum ProfileInstaller {
+    static let profileName = "TmuxManager"
+    static let profileGUID = "B7F2B9C6-4E0B-4E9B-9C4B-2A6D0F1E3A55"
+
+    static var profilesDirectory: URL {
+        FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/iTerm2/DynamicProfiles", isDirectory: true)
+    }
+
+    static var profileURL: URL { profilesDirectory.appendingPathComponent("TmuxManager.json") }
+
+    static var json: String {
+        let profile: [String: Any] = [
+            "Name": profileName,
+            "Guid": profileGUID,
+            "Dynamic Profile Parent Name": "Default",
+            "Close Sessions On End": true,
+            "Prompt Before Closing 2": false,
+        ]
+        let root: [String: Any] = ["Profiles": [profile]]
+        guard let data = try? JSONSerialization.data(withJSONObject: root,
+                                                     options: [.prettyPrinted, .sortedKeys]) else {
+            return "{}"
+        }
+        return String(decoding: data, as: UTF8.self)
+    }
+
+    static func install() {
+        do {
+            try FileManager.default.createDirectory(at: profilesDirectory, withIntermediateDirectories: true)
+            let desired = json.data(using: .utf8) ?? Data()
+            if let existing = try? Data(contentsOf: profileURL), existing == desired { return }
+            try desired.write(to: profileURL, options: .atomic)
+            Log.shared.write("installed iTerm2 dynamic profile at \(profileURL.path)")
+        } catch {
+            Log.shared.write("could not install iTerm2 profile: \(error)")
+        }
+    }
+}

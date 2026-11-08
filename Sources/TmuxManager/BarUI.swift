@@ -1,0 +1,365 @@
+import AppKit
+import TmuxManagerCore
+
+/// One capsule in the bar: gray when the console is closed, green when it is open.
+final class EntryButton: NSControl {
+    private(set) var entry: Entry
+    var isActive: Bool = false { didSet { applyState() } }
+    var isBusy: Bool = false { didSet { applyState() } }
+
+    var onOpen: ((Entry) -> Void)?
+    var onReconnect: ((Entry) -> Void)?
+    var onEdit: ((Entry) -> Void)?
+    var onRemove: ((Entry) -> Void)?
+
+    private let title = NSTextField(labelWithString: "")
+    private let dot = NSView()
+    private let spinner = NSProgressIndicator()
+    private let reconnectButton = NSButton()
+    private var hovered = false { didSet { applyState() } }
+    private var tracking: NSTrackingArea?
+
+    private let height: CGFloat = 26
+
+    private var titleHeight: CGFloat {
+        let font = title.font ?? NSFont.systemFont(ofSize: 12, weight: .medium)
+        return ceil(font.ascender - font.descender + font.leading)
+    }
+    private let horizontalPadding: CGFloat = 11
+
+    init(entry: Entry) {
+        self.entry = entry
+        super.init(frame: .zero)
+        wantsLayer = true
+        layer?.cornerRadius = height / 2
+        layer?.borderWidth = 1
+
+        title.font = .systemFont(ofSize: 12, weight: .medium)
+        title.lineBreakMode = .byTruncatingTail
+        title.textColor = NSColor.white.withAlphaComponent(0.92)
+        title.isEditable = false
+        title.isBordered = false
+        title.drawsBackground = false
+        addSubview(title)
+
+        dot.wantsLayer = true
+        dot.layer?.cornerRadius = 3
+        addSubview(dot)
+
+        spinner.style = .spinning
+        spinner.controlSize = .small
+        spinner.isDisplayedWhenStopped = false
+        addSubview(spinner)
+
+        reconnectButton.isBordered = false
+        reconnectButton.bezelStyle = .inline
+        reconnectButton.imagePosition = .imageOnly
+        reconnectButton.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath",
+                                        accessibilityDescription: "Reconnect")
+        reconnectButton.contentTintColor = NSColor.white.withAlphaComponent(0.85)
+        reconnectButton.target = self
+        reconnectButton.action = #selector(reconnectClicked)
+        reconnectButton.toolTip = "Force reconnect (ssh is restarted, the window stays)"
+        addSubview(reconnectButton)
+
+        toolTip = entry.address
+        applyState()
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    func update(entry: Entry) {
+        self.entry = entry
+        toolTip = entry.address
+        applyState()
+        invalidateIntrinsicContentSize()
+        needsLayout = true
+    }
+
+    // MARK: - Sizing
+
+    /// Measured directly instead of via the label's intrinsic size, which is stale
+    /// before the first layout pass.
+    private var measuredTextWidth: CGFloat {
+        let font = title.font ?? NSFont.systemFont(ofSize: 12, weight: .medium)
+        return ceil((entry.displayName as NSString).size(withAttributes: [.font: font]).width)
+    }
+
+    override var intrinsicContentSize: NSSize {
+        var width = horizontalPadding * 2 + 7 + 7 + measuredTextWidth + 2
+        if isActive { width += 22 }
+        if isBusy { width += 18 }
+        return NSSize(width: width, height: height)
+    }
+
+    override func layout() {
+        super.layout()
+        let centerY = bounds.midY
+        var x = horizontalPadding
+        dot.frame = NSRect(x: x, y: centerY - 3.5, width: 7, height: 7)
+        x += 7 + 7
+        let trailing = (isActive ? 22.0 : 0) + (isBusy ? 18.0 : 0)
+        title.frame = NSRect(x: x, y: round(centerY - titleHeight / 2),
+                             width: max(10, bounds.width - x - trailing - horizontalPadding),
+                             height: titleHeight)
+        var right = bounds.width - horizontalPadding
+        if isActive {
+            reconnectButton.frame = NSRect(x: right - 16, y: centerY - 8, width: 16, height: 16)
+            right -= 22
+        }
+        if isBusy {
+            spinner.frame = NSRect(x: right - 14, y: centerY - 7, width: 14, height: 14)
+        }
+    }
+
+    // MARK: - State
+
+    private func applyState() {
+        title.stringValue = entry.displayName
+        if isActive {
+            layer?.backgroundColor = NSColor.systemGreen.withAlphaComponent(hovered ? 0.38 : 0.26).cgColor
+            layer?.borderColor = NSColor.systemGreen.withAlphaComponent(0.85).cgColor
+            dot.layer?.backgroundColor = NSColor.systemGreen.cgColor
+        } else {
+            layer?.backgroundColor = NSColor.white.withAlphaComponent(hovered ? 0.16 : 0.08).cgColor
+            layer?.borderColor = NSColor.white.withAlphaComponent(0.12).cgColor
+            dot.layer?.backgroundColor = NSColor.white.withAlphaComponent(0.35).cgColor
+        }
+        reconnectButton.isHidden = !(isActive && hovered)
+        reconnectButton.alphaValue = hovered ? 1 : 0
+        if isBusy {
+            spinner.startAnimation(nil)
+        } else {
+            spinner.stopAnimation(nil)
+        }
+        invalidateIntrinsicContentSize()
+        needsLayout = true
+    }
+
+    // MARK: - Events
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: bounds,
+                                  options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseExited(with event: NSEvent) { hovered = false }
+
+    override func mouseDown(with event: NSEvent) {
+        guard !isBusy else { return }
+        NSApp.activate(ignoringOtherApps: true)
+        onOpen?(entry)
+    }
+
+    override func menu(for event: NSEvent) -> NSMenu? {
+        let menu = NSMenu()
+        let open = NSMenuItem(title: isActive ? "Activate Window" : "Open Console",
+                              action: #selector(openFromMenu), keyEquivalent: "")
+        open.target = self
+        open.isEnabled = !isBusy
+        menu.addItem(open)
+
+        let reconnect = NSMenuItem(title: "Force Reconnect", action: #selector(reconnectFromMenu),
+                                   keyEquivalent: "")
+        reconnect.target = self
+        reconnect.isEnabled = isActive
+        menu.addItem(reconnect)
+
+        menu.addItem(.separator())
+
+        let edit = NSMenuItem(title: "Edit…", action: #selector(editFromMenu), keyEquivalent: "")
+        edit.target = self
+        menu.addItem(edit)
+
+        let remove = NSMenuItem(title: "Remove…", action: #selector(removeFromMenu), keyEquivalent: "")
+        remove.target = self
+        menu.addItem(remove)
+        return menu
+    }
+
+    @objc private func openFromMenu() { onOpen?(entry) }
+    @objc private func reconnectFromMenu() { onReconnect?(entry) }
+    @objc private func editFromMenu() { onEdit?(entry) }
+    @objc private func removeFromMenu() { onRemove?(entry) }
+
+    @objc private func reconnectClicked() {
+        NSApp.activate(ignoringOtherApps: true)
+        onReconnect?(entry)
+    }
+
+    override func resetCursorRects() {
+        addCursorRect(bounds, cursor: .pointingHand)
+    }
+}
+
+/// The floating bar itself.
+final class BarView: NSVisualEffectView {
+    private let scrollView = NSScrollView()
+    private let stack = NSStackView()
+    private let errorLabel = NSTextField(labelWithString: "")
+    private let addButton = PlusButton()
+    private var entryButtons: [String: EntryButton] = [:]
+    private weak var model: AppModel?
+
+    var onAddRequested: (() -> Void)?
+
+    private let barHeight: CGFloat = 44
+
+    init(model: AppModel) {
+        self.model = model
+        super.init(frame: .zero)
+        material = .hudWindow
+        blendingMode = .behindWindow
+        state = .active
+        wantsLayer = true
+        layer?.cornerRadius = 12
+        layer?.masksToBounds = true
+
+        errorLabel.font = .systemFont(ofSize: 11, weight: .medium)
+        errorLabel.textColor = .systemRed
+        errorLabel.lineBreakMode = .byTruncatingTail
+        errorLabel.maximumNumberOfLines = 1
+        errorLabel.isHidden = true
+        errorLabel.toolTip = "Click to dismiss"
+        errorLabel.addGestureRecognizer(NSClickGestureRecognizer(target: self, action: #selector(dismissError)))
+
+        addButton.image = NSImage(systemSymbolName: "plus", accessibilityDescription: "Add entry")
+        addButton.isBordered = false
+        addButton.bezelStyle = .inline
+        addButton.imagePosition = .imageOnly
+        addButton.contentTintColor = NSColor.white.withAlphaComponent(0.85)
+        addButton.toolTip = "Add host:session"
+        addButton.target = self
+        addButton.action = #selector(addClicked)
+
+        stack.orientation = .horizontal
+        stack.alignment = .centerY
+        stack.spacing = 8
+        stack.edgeInsets = NSEdgeInsets(top: 9, left: 12, bottom: 9, right: 12)
+
+        scrollView.drawsBackground = false
+        scrollView.hasHorizontalScroller = false
+        scrollView.hasVerticalScroller = false
+        scrollView.verticalScrollElasticity = .none
+        scrollView.horizontalScrollElasticity = .automatic
+        scrollView.documentView = stack
+        addSubview(scrollView)
+
+        reload()
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    var preferredHeight: CGFloat { barHeight }
+
+    /// Rebuilds the row from the model.
+    func reload() {
+        guard let model else { return }
+        stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        var live: Set<String> = []
+
+        if let message = model.errorMessage {
+            errorLabel.stringValue = Self.shorten(message)
+            errorLabel.toolTip = message + " (click to dismiss)"
+            errorLabel.isHidden = false
+            stack.addArrangedSubview(errorLabel)
+        } else {
+            errorLabel.isHidden = true
+        }
+
+        for entry in model.config.sortedEntries {
+            let button: EntryButton
+            if let existing = entryButtons[entry.id] {
+                button = existing
+                button.update(entry: entry)
+            } else {
+                button = EntryButton(entry: entry)
+                button.onOpen = { [weak self] entry in self?.model?.open(entry) }
+                button.onReconnect = { [weak self] entry in self?.model?.reconnect(entry) }
+                button.onEdit = { [weak self] entry in self?.editEntry(entry) }
+                button.onRemove = { [weak self] entry in self?.removeEntry(entry) }
+                entryButtons[entry.id] = button
+            }
+            button.isActive = model.isActive(entry)
+            button.isBusy = model.isBusy(entry)
+            live.insert(entry.id)
+            stack.addArrangedSubview(button)
+        }
+        for (id, button) in entryButtons where !live.contains(id) {
+            button.removeFromSuperview()
+            entryButtons[id] = nil
+        }
+
+        stack.addArrangedSubview(addButton)
+        needsLayout = true
+        if Debug.enabled {
+            let sizes = stack.arrangedSubviews.map { "\(type(of: $0))=\($0.intrinsicContentSize.width)" }
+            Log.shared.write("bar content width=\(contentWidth) parts=\(sizes)")
+        }
+    }
+
+    /// Height and width for the window: the content width, capped by `maxWidth`.
+    func fittingBarSize(maxWidth: CGFloat) -> NSSize {
+        NSSize(width: min(contentWidth, maxWidth), height: barHeight)
+    }
+
+    private var contentWidth: CGFloat {
+        let insets = stack.edgeInsets
+        let widths = stack.arrangedSubviews.map { ceil($0.intrinsicContentSize.width) }
+        let gaps = CGFloat(max(0, widths.count - 1)) * stack.spacing
+        return max(120, widths.reduce(0, +) + gaps + insets.left + insets.right)
+    }
+
+    override func layout() {
+        super.layout()
+        scrollView.frame = bounds
+        let width = max(contentWidth, scrollView.contentSize.width)
+        stack.frame = NSRect(x: 0, y: 0, width: width, height: bounds.height)
+    }
+
+    private static func shorten(_ message: String, limit: Int = 58) -> String {
+        message.count <= limit ? message : String(message.prefix(limit - 1)) + "…"
+    }
+
+    @objc private func addClicked() { onAddRequested?() }
+    @objc private func dismissError() { model?.dismissError() }
+
+    private func editEntry(_ entry: Entry) {
+        guard let model, let window else { return }
+        EntryEditor.present(entry: entry, model: model, on: window)
+    }
+
+    private func removeEntry(_ entry: Entry) {
+        guard let model else { return }
+        let alert = NSAlert()
+        alert.messageText = "Remove \(entry.displayName)?"
+        alert.informativeText = model.isActive(entry)
+            ? "The console window for this entry will be closed. The tmux session itself is only killed if you tick the box below."
+            : "This only removes the entry from the bar."
+        let killBox = NSButton(checkboxWithTitle: "Also kill the remote tmux session (\(entry.session))",
+                               target: nil, action: nil)
+        killBox.state = .off
+        alert.accessoryView = killBox
+        alert.addButton(withTitle: "Remove")
+        alert.addButton(withTitle: "Cancel")
+        if alert.runModal() == .alertFirstButtonReturn {
+            model.remove(entry, killRemoteSession: killBox.state == .on)
+        }
+    }
+}
+
+/// Square-ish hit target for the "+" control.
+final class PlusButton: NSButton {
+    override var intrinsicContentSize: NSSize { NSSize(width: 24, height: 24) }
+}
+
+final class BarWindow: NSWindow {
+    override var canBecomeKey: Bool { true }
+    override var canBecomeMain: Bool { false }
+}
