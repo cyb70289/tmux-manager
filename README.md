@@ -2,6 +2,8 @@
 
 A small macOS bar that keeps a list of `host : tmux session` entries and opens each one in its own iTerm2 window over `ssh`. Click a button to open or raise the console, `⟳` to reconnect without losing the window, right-click to close, edit or remove.
 
+Typical use: long-lived tmux sessions on a few remote hosts, each one click away. The bar remembers each window's on-screen position/size and reattaches exactly there. It only drives your existing iTerm2 — no new console app, nothing else to keep running.
+
 Requirements: macOS 13+, iTerm2, system `ssh`, `tmux` on the remote host. No other dependencies — the app shells out to `ssh` and drives iTerm2 with AppleScript.
 
 ## Build and run
@@ -98,7 +100,7 @@ Frames use AppleScript `bounds` space: top-left origin, y growing downward from 
 
 - AppleScript needs the Automation grant; if iTerm2 is not running the app starts it first.
 - `attach.sh` validates session names (`[A-Za-z0-9_.-]`) because the name travels through a remote shell.
-- `-D` (detach other clients) is off by default: it silently kicks clients attached from other machines, which also fixes window-size shrinking caused by stale clients.
+- `-D` (detach other clients) is on by default: it silently kicks clients attached from other machines, which also fixes window-size shrinking caused by stale clients.
 - Clicking a gray button opens a *new* window; a console closed seconds ago may still have a live wrapper (iTerm2's SIGHUP delay), so the new window replaces the state file and the old wrapper leaves it alone.
-- `--debug` enables a distributed-notification hook for scripted testing:
+- `--debug` (or an empty `debug` file in the support directory) enables a distributed-notification hook for scripted testing:
   `osascript -l JavaScript tools/post-debug.js open <uuid>` (see `tools/post-debug.js`).
