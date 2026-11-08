@@ -31,6 +31,7 @@ bundle: build icon
 install: bundle
 	rm -rf "$(INSTALL_DIR)/$(APP_NAME).app"
 	cp -R $(BUNDLE) "$(INSTALL_DIR)/$(APP_NAME).app"
+	rm -rf $(BUNDLE)
 	@echo "Installed $(INSTALL_DIR)/$(APP_NAME).app"
 
 run: install
