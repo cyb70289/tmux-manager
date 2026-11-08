@@ -237,6 +237,23 @@ final class AppModel {
         }
     }
 
+    /// Closes an open console window: captures the window's current frame and
+    /// persists it immediately, then tears the connection down. The remote tmux
+    /// session survives; only the local window and ssh die.
+    func closeConsole(_ entry: Entry) {
+        guard let state = states[entry.id] else { return }
+        captureFrames()
+        storeFramesNow()
+        kill(state.wrapperPid, SIGTERM)
+        if let guid = state.itermSessionID, !guid.isEmpty {
+            controller.closeWindow(guid: guid)
+        }
+        states[entry.id] = nil
+        try? FileManager.default.removeItem(at: paths.stateURL(entryID: entry.id))
+        Log.shared.write("closed console for \(entry.address)")
+        onChange?()
+    }
+
     private func killRemote(_ entry: Entry) {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             var args = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]

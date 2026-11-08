@@ -66,6 +66,7 @@ final class DebugHook {
         switch action {
         case "open": model.open(entry)
         case "reconnect": model.reconnect(entry)
+        case "close": model.closeConsole(entry)
         case "remove": model.remove(entry, killRemoteSession: info["kill"] == "1")
         case "update":
             if let json = info["json"], let data = json.data(using: .utf8),

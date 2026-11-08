@@ -12,6 +12,7 @@ final class EntryButton: NSControl {
 
     var onOpen: ((Entry) -> Void)?
     var onReconnect: ((Entry) -> Void)?
+    var onClose: ((Entry) -> Void)?
     var onEdit: ((Entry) -> Void)?
     var onRemove: ((Entry) -> Void)?
 
@@ -184,6 +185,11 @@ final class EntryButton: NSControl {
         menu.addItem(reconnect)
 
         menu.addItem(.separator())
+        let close = NSMenuItem(title: "Close Console", action: #selector(closeFromMenu), keyEquivalent: "")
+        close.target = self
+        close.isEnabled = isActive
+        menu.addItem(close)
+        menu.addItem(.separator())
 
         let edit = NSMenuItem(title: "Edit…", action: #selector(editFromMenu), keyEquivalent: "")
         edit.target = self
@@ -197,6 +203,7 @@ final class EntryButton: NSControl {
 
     @objc private func openFromMenu() { onOpen?(entry) }
     @objc private func reconnectFromMenu() { onReconnect?(entry) }
+    @objc private func closeFromMenu() { onClose?(entry) }
     @objc private func editFromMenu() { onEdit?(entry) }
     @objc private func removeFromMenu() { onRemove?(entry) }
 
@@ -294,6 +301,7 @@ final class BarView: NSVisualEffectView {
                 button = EntryButton(entry: entry)
                 button.onOpen = { [weak self] entry in self?.model?.open(entry) }
                 button.onReconnect = { [weak self] entry in self?.model?.reconnect(entry) }
+                button.onClose = { [weak self] entry in self?.model?.closeConsole(entry) }
                 button.onEdit = { [weak self] entry in self?.editEntry(entry) }
                 button.onRemove = { [weak self] entry in self?.removeEntry(entry) }
                 entryButtons[entry.id] = button

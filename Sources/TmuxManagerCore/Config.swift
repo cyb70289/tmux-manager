@@ -41,7 +41,7 @@ public struct UIConfig: Codable, Equatable {
     public var barOrigin: BarOrigin?
     public var frameCaptureIntervalSeconds: Double
 
-    public init(barOrigin: BarOrigin? = nil, frameCaptureIntervalSeconds: Double = 10) {
+    public init(barOrigin: BarOrigin? = nil, frameCaptureIntervalSeconds: Double = 30) {
         self.barOrigin = barOrigin
         self.frameCaptureIntervalSeconds = frameCaptureIntervalSeconds
     }
@@ -54,7 +54,7 @@ public struct UIConfig: Codable, Equatable {
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         barOrigin = try c.decodeIfPresent(BarOrigin.self, forKey: .barOrigin)
-        let interval = try c.decodeIfPresent(Double.self, forKey: .frameCaptureIntervalSeconds) ?? 10
+        let interval = try c.decodeIfPresent(Double.self, forKey: .frameCaptureIntervalSeconds) ?? 30
         frameCaptureIntervalSeconds = min(max(interval, 1), 3600)
     }
 }

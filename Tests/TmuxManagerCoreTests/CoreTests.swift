@@ -160,7 +160,7 @@ final class CoreTests: XCTestCase {
     func testConfigDefaultsWhenFieldsMissing() throws {
         let json = #"{"entries":[{"host":"h","session":"s"}]}"#
         let config = try JSONDecoder().decode(Config.self, from: Data(json.utf8))
-        XCTAssertEqual(config.ui.frameCaptureIntervalSeconds, 10)
+        XCTAssertEqual(config.ui.frameCaptureIntervalSeconds, 30)
         XCTAssertEqual(config.entries.first?.sshOptions, [])
         XCTAssertEqual(config.entries.first?.detachOtherClients, false)
         XCTAssertFalse(config.entries.first?.id.isEmpty ?? true)
