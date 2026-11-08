@@ -125,15 +125,24 @@ final class AppModel {
         let entry = config.entry(id: entry.id) ?? entry
         guard !busy.contains(entry.id) else { return }
         if let state = states[entry.id], let guid = state.itermSessionID, !guid.isEmpty {
+            // Mark busy for the whole probe too: without it, a second fast click
+            // starts a second activate, and both completions would open a window.
+            busy.insert(entry.id)
+            onChange?()
             controller.activate(guid: guid) { [weak self] found in
                 guard let self else { return }
                 if found {
+                    self.busy.remove(entry.id)
                     Log.shared.write("activated existing window for \(entry.address)")
                     self.captureFrames()
                     self.flushFrames()
                 } else {
                     Log.shared.write("window for \(entry.address) is gone; opening a new one")
                     self.states[entry.id] = nil
+                    // Hand over to createWindow: clear the probe's busy mark in
+                    // the same main-thread turn, so createWindow's guard admits
+                    // this call but still rejects a stale duplicate completion.
+                    self.busy.remove(entry.id)
                     self.createWindow(for: entry)
                 }
                 self.onChange?()
@@ -144,33 +153,53 @@ final class AppModel {
     }
 
     private func createWindow(for entry: Entry) {
+        // Defensive: callers serialize on the main thread, but the activate
+        // completion above can land here twice for one double-click.
+        guard !busy.contains(entry.id) else { return }
         busy.insert(entry.id)
         onChange?()
         let frame = clampedRestoreFrame(for: entry)
         controller.createWindow(entry: entry, frame: frame) { [weak self] result in
             guard let self else { return }
-            self.busy.remove(entry.id)
             switch result {
             case .success:
+                // busy stays set until the wrapper's state file confirms the
+                // window; clearing it here would leave a gap in which a fast
+                // click opens a second window.
                 self.waitForState(of: entry.id, attempts: 30)
             case .failure(let error):
+                self.busy.remove(entry.id)
                 self.show(error: error.localizedDescription)
             }
             self.onChange?()
         }
     }
 
-    /// The wrapper writes its state file right after launching ssh.
+    /// The wrapper writes its state file right after launching ssh. Also the
+    /// point where `busy` is cleared on the open path: the console counts as
+    /// open only once the state file exists.
     private func waitForState(of entryID: String, attempts: Int) {
         guard attempts > 0 else {
+            busy.remove(entryID)
             show(error: "The console window opened but never reported back. Check \(paths.logURL.path).")
+            onChange?()
             return
         }
-        if states[entryID] != nil { return }
+        if states[entryID] != nil {
+            busy.remove(entryID)
+            onChange?()
+            return
+        }
+        if config.entry(id: entryID) == nil {
+            // The entry was removed while opening; stop waiting quietly.
+            busy.remove(entryID)
+            return
+        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
             guard let self else { return }
             self.refreshStates()
             if self.states[entryID] != nil {
+                self.busy.remove(entryID)
                 self.onChange?()
             } else {
                 self.waitForState(of: entryID, attempts: attempts - 1)
@@ -230,6 +259,7 @@ final class AppModel {
         }
         config.entries.removeAll { $0.id == entry.id }
         frames[entry.id] = nil
+        busy.remove(entry.id)
         save()
         onChange?()
         if killRemoteSession {
@@ -241,7 +271,7 @@ final class AppModel {
     /// persists it immediately, then tears the connection down. The remote tmux
     /// session survives; only the local window and ssh die.
     func closeConsole(_ entry: Entry) {
-        guard let state = states[entry.id] else { return }
+        guard let state = states[entry.id], !busy.contains(entry.id) else { return }
         captureFrames()
         storeFramesNow()
         kill(state.wrapperPid, SIGTERM)
