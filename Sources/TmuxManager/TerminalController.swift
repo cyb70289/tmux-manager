@@ -7,7 +7,7 @@ final class TerminalController {
     private let paths: Paths
     private let queue = DispatchQueue(label: "com.cyb.tmuxmanager.iterm", qos: .userInitiated)
     private var frameScript: NSAppleScript?
-    private let iTermBundleID = "com.googlecode.iterm2"
+    private static let iTermBundleID = "com.googlecode.iterm2"
 
     init(paths: Paths) {
         self.paths = paths
@@ -46,6 +46,13 @@ final class TerminalController {
     /// Returns true when the window owning `guid` was found and raised.
     func activate(guid: String, completion: @escaping (Bool) -> Void) {
         queue.async {
+            // Never let the Apple event launch iTerm2: that would open an
+            // untitled window (the caller treats not-found as "open a new
+            // console", which launches iTerm2 properly).
+            guard Self.isITermRunning() else {
+                DispatchQueue.main.async { completion(false) }
+                return
+            }
             let result = Shell.osascript(AppleScripts.activateSession(guid: guid), timeout: 15)
             let found = result.status == 0
                 && result.stdout.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() == "true"
@@ -58,6 +65,7 @@ final class TerminalController {
 
     func closeWindow(guid: String) {
         queue.async {
+            guard Self.isITermRunning() else { return } // no window left to close
             let result = Shell.osascript(AppleScripts.closeSessionWindow(guid: guid), timeout: 15)
             if result.status != 0 {
                 Log.shared.write("close failed: \(Self.describe(result, context: "close"))")
@@ -67,6 +75,9 @@ final class TerminalController {
 
     /// Synchronous and cheap (in-process Apple Event); called from the main thread timer.
     func frames() -> [SessionFrame] {
+        // A `tell` block to a not-running app would launch iTerm2 (untitled
+        // window included); there is simply nothing to poll then.
+        guard Self.isITermRunning() else { return [] }
         if frameScript == nil {
             frameScript = NSAppleScript(source: AppleScripts.sessionFrames())
         }
@@ -86,21 +97,60 @@ final class TerminalController {
 
     // MARK: - Helpers
 
+    static func isITermRunning() -> Bool {
+        !NSRunningApplication.runningApplications(withBundleIdentifier: iTermBundleID).isEmpty
+    }
+
     static func ensureITermRunning() {
-        let running = NSRunningApplication.runningApplications(withBundleIdentifier: "com.googlecode.iterm2")
-        guard running.isEmpty else { return }
+        guard !isITermRunning() else { return }
         Log.shared.write("iTerm2 is not running; launching it")
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
-        task.arguments = ["-b", "com.googlecode.iterm2"]
-        try? task.run()
-        task.waitUntilExit()
+        // Two things open a stray window when iTerm2 starts: AppKit's
+        // open-untitled-file callback (triggered by the run event a normal
+        // launch sends) and iTerm2's own startup activities. The quiet marker
+        // suppresses the latter; launching via AppleScript's `launch` (which
+        // sends no run event) suppresses the former. Verified: launch + quiet
+        // marker → zero startup windows.
+        let quietMarker = Self.writeITermQuietMarker()
+        let launched = Shell.osascript("launch application id \"\(iTermBundleID)\"", timeout: 15)
+        if launched.status != 0 {
+            Log.shared.write("AppleScript launch failed (\(launched.combined)); falling back to open")
+            let task = Process()
+            task.executableURL = URL(fileURLWithPath: "/usr/bin/open")
+            task.arguments = ["-b", iTermBundleID]
+            try? task.run()
+            task.waitUntilExit()
+        }
         for _ in 0..<40 {
-            if !NSRunningApplication.runningApplications(withBundleIdentifier: "com.googlecode.iterm2").isEmpty,
-               Shell.osascript("tell application \"iTerm2\" to get version", timeout: 3).status == 0 {
+            if isITermRunning(),
+               Shell.osascript("tell application id \"\(iTermBundleID)\" to get version", timeout: 3).status == 0 {
                 return
             }
             usleep(150_000)
+        }
+        // iTerm2 never came up. Remove the marker ourselves so it cannot
+        // suppress startup windows on the user's next manual launch (a real
+        // launch consumes and deletes it).
+        if let quietMarker {
+            try? FileManager.default.removeItem(at: quietMarker)
+            Log.shared.write("iTerm2 did not launch; removed the quiet marker")
+        }
+    }
+
+    /// Best effort: writes `~/Library/Application Support/iTerm2/quiet`, the
+    /// file iTerm2 looks for at launch to skip its startup window. A failure
+    /// only falls back to the old behavior (one extra empty window).
+    static func writeITermQuietMarker() -> URL? {
+        let url = FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent("Library/Application Support/iTerm2/quiet")
+        do {
+            try FileManager.default.createDirectory(at: url.deletingLastPathComponent(),
+                                                    withIntermediateDirectories: true)
+            try Data().write(to: url)
+            Log.shared.write("wrote iTerm2 quiet marker at \(url.path)")
+            return url
+        } catch {
+            Log.shared.write("could not write iTerm2 quiet marker: \(error.localizedDescription)")
+            return nil
         }
     }
 
