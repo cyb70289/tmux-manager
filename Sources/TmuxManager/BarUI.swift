@@ -17,9 +17,8 @@ final class EntryButton: NSControl {
     var onRemove: ((Entry) -> Void)?
 
     private let title = NSTextField(labelWithString: "")
-    private let dot = NSView()
     private let spinner = NSProgressIndicator()
-    private let reconnectButton = NSButton()
+    private let reconnectButton = HighlightIconButton()
     private var hovered = false { didSet { applyState() } }
     private var tracking: NSTrackingArea?
 
@@ -46,21 +45,11 @@ final class EntryButton: NSControl {
         title.drawsBackground = false
         addSubview(title)
 
-        dot.wantsLayer = true
-        dot.layer?.cornerRadius = 3
-        addSubview(dot)
-
         spinner.style = .spinning
         spinner.controlSize = .small
         spinner.isDisplayedWhenStopped = false
         addSubview(spinner)
 
-        reconnectButton.isBordered = false
-        reconnectButton.bezelStyle = .inline
-        reconnectButton.imagePosition = .imageOnly
-        reconnectButton.image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath",
-                                        accessibilityDescription: "Reconnect")
-        reconnectButton.contentTintColor = NSColor.labelColor
         reconnectButton.target = self
         reconnectButton.action = #selector(reconnectClicked)
         reconnectButton.toolTip = "Force reconnect (ssh is restarted, the window stays)"
@@ -99,7 +88,7 @@ final class EntryButton: NSControl {
     }
 
     override var intrinsicContentSize: NSSize {
-        var width = horizontalPadding * 2 + 7 + 7 + measuredTextWidth + 8
+        var width = horizontalPadding * 2 + measuredTextWidth + 8
         if isActive { width += 22 }
         if isBusy { width += 18 }
         return NSSize(width: width, height: height)
@@ -108,9 +97,7 @@ final class EntryButton: NSControl {
     override func layout() {
         super.layout()
         let centerY = bounds.midY
-        var x = horizontalPadding
-        dot.frame = NSRect(x: x, y: centerY - 3.5, width: 7, height: 7)
-        x += 7 + 7
+        let x = horizontalPadding
         let trailing = (isActive ? 22.0 : 0) + (isBusy ? 18.0 : 0)
         title.frame = NSRect(x: x, y: round(centerY - titleHeight / 2),
                              width: max(10, bounds.width - x - trailing - horizontalPadding),
@@ -132,14 +119,11 @@ final class EntryButton: NSControl {
         if isActive {
             layer?.backgroundColor = NSColor.systemGreen.withAlphaComponent(hovered ? 0.38 : 0.26).cgColor
             layer?.borderColor = NSColor.systemGreen.withAlphaComponent(0.85).cgColor
-            dot.layer?.backgroundColor = NSColor.systemGreen.cgColor
         } else {
             layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(hovered ? 0.16 : 0.08).cgColor
             layer?.borderColor = NSColor.labelColor.withAlphaComponent(0.18).cgColor
-            dot.layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(0.45).cgColor
         }
-        reconnectButton.isHidden = !(isActive && hovered)
-        reconnectButton.alphaValue = hovered ? 1 : 0
+        reconnectButton.isHidden = !isActive
         if isBusy {
             spinner.startAnimation(nil)
         } else {
@@ -214,6 +198,54 @@ final class EntryButton: NSControl {
 
     override func resetCursorRects() {
         addCursorRect(bounds, cursor: .pointingHand)
+    }
+}
+
+/// An icon-only button that grows its icon slightly on hover. The capsule it sits
+/// in keeps its own hover state, so the background is left alone.
+private final class HighlightIconButton: NSButton {
+    private static let symbolName = "arrow.triangle.2.circlepath"
+
+    private static func icon(pointSize: CGFloat) -> NSImage? {
+        NSImage(systemSymbolName: symbolName, accessibilityDescription: "Reconnect")?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: pointSize,
+                                                                 weight: .regular))
+    }
+
+    private var hovered = false {
+        didSet { image = Self.icon(pointSize: hovered ? 15.5 : 13) }
+    }
+    private var tracking: NSTrackingArea?
+
+    init() {
+        super.init(frame: .zero)
+        isBordered = false
+        bezelStyle = .inline
+        imagePosition = .imageOnly
+        imageScaling = .scaleNone
+        alignment = .center
+        contentTintColor = .labelColor
+        image = Self.icon(pointSize: 13)
+    }
+
+    required init?(coder: NSCoder) { fatalError("not supported") }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let tracking { removeTrackingArea(tracking) }
+        let area = NSTrackingArea(rect: .zero,
+                                  options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                  owner: self, userInfo: nil)
+        addTrackingArea(area)
+        tracking = area
+    }
+
+    override func mouseEntered(with event: NSEvent) { hovered = true }
+    override func mouseExited(with event: NSEvent) { hovered = false }
+
+    override func viewDidHide() {
+        super.viewDidHide()
+        hovered = false
     }
 }
 
