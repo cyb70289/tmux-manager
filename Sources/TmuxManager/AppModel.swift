@@ -12,6 +12,7 @@ final class AppModel {
     private(set) var config: Config
     private(set) var states: [String: WrapperState] = [:]
     private(set) var busy: Set<String> = []
+    private(set) var reconnecting: Set<String> = []
     private(set) var errorMessage: String?
     private(set) var notes: [String] = []
 
@@ -113,6 +114,7 @@ final class AppModel {
 
     func isActive(_ entry: Entry) -> Bool { states[entry.id] != nil }
     func isBusy(_ entry: Entry) -> Bool { busy.contains(entry.id) }
+    func isReconnecting(_ entry: Entry) -> Bool { reconnecting.contains(entry.id) }
 
     func liveState(_ entry: Entry) -> WrapperState? { states[entry.id] }
 
@@ -209,14 +211,57 @@ final class AppModel {
 
     func reconnect(_ entry: Entry) {
         let entry = config.entry(id: entry.id) ?? entry
-        guard let state = states[entry.id] else { return }
-        captureFrames()
-        flushFrames()
-        if kill(state.wrapperPid, SIGUSR1) == 0 {
-            Log.shared.write("sent reconnect to \(entry.address) (pid \(state.wrapperPid))")
-        } else {
-            show(error: "Could not signal the console process for \(entry.displayName).")
+        guard !busy.contains(entry.id), let state = states[entry.id] else { return }
+        busy.insert(entry.id)
+        reconnecting.insert(entry.id)
+        onChange?()
+        // Let AppKit draw the spinner before the synchronous frame capture.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) { [weak self] in
+            guard let self, self.reconnecting.contains(entry.id) else { return }
+            self.captureFrames()
+            self.flushFrames()
+            if kill(state.wrapperPid, SIGUSR1) == 0 {
+                Log.shared.write("sent reconnect to \(entry.address) (pid \(state.wrapperPid))")
+                // Keep even a fast restart visible, then wait for the wrapper to
+                // report a replacement ssh process (not remote-host liveness).
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) { [weak self] in
+                    self?.waitForReconnect(of: entry, previous: state, attempts: 30)
+                }
+            } else {
+                self.finishReconnect(entry.id)
+                self.show(error: "Could not signal the console process for \(entry.displayName).")
+            }
         }
+    }
+
+    private func waitForReconnect(of entry: Entry, previous: WrapperState, attempts: Int) {
+        guard reconnecting.contains(entry.id) else { return }
+        refreshStates()
+        guard let state = states[entry.id] else {
+            finishReconnect(entry.id)
+            return
+        }
+        if state.wrapperPid != previous.wrapperPid
+            || (state.sshPid != nil && state.sshPid != previous.sshPid) {
+            finishReconnect(entry.id)
+            return
+        }
+        guard attempts > 0 else {
+            finishReconnect(entry.id)
+            // A failed ssh may already be back at the retry prompt, with no
+            // replacement pid left to observe. Never leave the control busy.
+            Log.shared.write("reconnect wait ended without a new ssh pid for \(entry.address)")
+            return
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) { [weak self] in
+            self?.waitForReconnect(of: entry, previous: previous, attempts: attempts - 1)
+        }
+    }
+
+    private func finishReconnect(_ entryID: String) {
+        reconnecting.remove(entryID)
+        busy.remove(entryID)
+        onChange?()
     }
 
     func add(_ entry: Entry, thenProbe: Bool = true) -> Bool {
@@ -259,6 +304,7 @@ final class AppModel {
         }
         config.entries.removeAll { $0.id == entry.id }
         frames[entry.id] = nil
+        reconnecting.remove(entry.id)
         busy.remove(entry.id)
         save()
         onChange?()

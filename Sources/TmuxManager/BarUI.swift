@@ -9,6 +9,7 @@ final class EntryButton: NSControl {
     private(set) var entry: Entry
     var isActive: Bool = false { didSet { applyState() } }
     var isBusy: Bool = false { didSet { applyState() } }
+    var isReconnecting: Bool = false { didSet { applyState() } }
 
     var onOpen: ((Entry) -> Void)?
     var onReconnect: ((Entry) -> Void)?
@@ -18,7 +19,7 @@ final class EntryButton: NSControl {
 
     private let title = NSTextField(labelWithString: "")
     private let spinner = NSProgressIndicator()
-    private let reconnectButton = HighlightIconButton()
+    private let reconnectButton = ReconnectButton()
     private var hovered = false { didSet { applyState() } }
     private var tracking: NSTrackingArea?
 
@@ -87,10 +88,13 @@ final class EntryButton: NSControl {
         return ceil((labelText as NSString).size(withAttributes: [.font: font]).width)
     }
 
+    private var showsReconnectSpinner: Bool { isActive && isReconnecting }
+    private var showsOpeningSpinner: Bool { isBusy && !showsReconnectSpinner }
+
     override var intrinsicContentSize: NSSize {
         var width = horizontalPadding * 2 + measuredTextWidth + 8
         if isActive { width += 22 }
-        if isBusy { width += 18 }
+        if showsOpeningSpinner { width += 18 }
         return NSSize(width: width, height: height)
     }
 
@@ -98,16 +102,19 @@ final class EntryButton: NSControl {
         super.layout()
         let centerY = bounds.midY
         let x = horizontalPadding
-        let trailing = (isActive ? 22.0 : 0) + (isBusy ? 18.0 : 0)
+        let trailing = (isActive ? 22.0 : 0) + (showsOpeningSpinner ? 18.0 : 0)
         title.frame = NSRect(x: x, y: round(centerY - titleHeight / 2),
                              width: max(10, bounds.width - x - trailing - horizontalPadding),
                              height: titleHeight)
         var right = bounds.width - horizontalPadding
         if isActive {
             reconnectButton.frame = NSRect(x: right - 16, y: centerY - 8, width: 16, height: 16)
+            if showsReconnectSpinner {
+                spinner.frame = NSRect(x: right - 15, y: centerY - 7, width: 14, height: 14)
+            }
             right -= 22
         }
-        if isBusy {
+        if showsOpeningSpinner {
             spinner.frame = NSRect(x: right - 14, y: centerY - 7, width: 14, height: 14)
         }
     }
@@ -123,7 +130,9 @@ final class EntryButton: NSControl {
             layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(hovered ? 0.16 : 0.08).cgColor
             layer?.borderColor = NSColor.labelColor.withAlphaComponent(0.18).cgColor
         }
-        reconnectButton.isHidden = !isActive
+        reconnectButton.isHidden = !isActive || showsReconnectSpinner
+        reconnectButton.isEnabled = !isBusy
+        spinner.isHidden = !isBusy
         if isBusy {
             spinner.startAnimation(nil)
         } else {
@@ -165,13 +174,13 @@ final class EntryButton: NSControl {
         let reconnect = NSMenuItem(title: "Force Reconnect", action: #selector(reconnectFromMenu),
                                    keyEquivalent: "")
         reconnect.target = self
-        reconnect.isEnabled = isActive
+        reconnect.isEnabled = isActive && !isBusy
         menu.addItem(reconnect)
 
         menu.addItem(.separator())
         let close = NSMenuItem(title: "Close Console", action: #selector(closeFromMenu), keyEquivalent: "")
         close.target = self
-        close.isEnabled = isActive
+        close.isEnabled = isActive && !isBusy
         menu.addItem(close)
         menu.addItem(.separator())
 
@@ -192,6 +201,7 @@ final class EntryButton: NSControl {
     @objc private func removeFromMenu() { onRemove?(entry) }
 
     @objc private func reconnectClicked() {
+        guard !isBusy else { return }
         NSApp.activate(ignoringOtherApps: true)
         onReconnect?(entry)
     }
@@ -201,21 +211,8 @@ final class EntryButton: NSControl {
     }
 }
 
-/// An icon-only button that grows its icon slightly on hover. The capsule it sits
-/// in keeps its own hover state, so the background is left alone.
-private final class HighlightIconButton: NSButton {
-    private static let symbolName = "arrow.triangle.2.circlepath"
-
-    private static func icon(pointSize: CGFloat) -> NSImage? {
-        NSImage(systemSymbolName: symbolName, accessibilityDescription: "Reconnect")?
-            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: pointSize,
-                                                                 weight: .regular))
-    }
-
-    private var hovered = false {
-        didSet { image = Self.icon(pointSize: hovered ? 15.5 : 13) }
-    }
-    private var tracking: NSTrackingArea?
+/// Fixed-size icon; hover feedback belongs to the capsule.
+private final class ReconnectButton: NSButton {
 
     init() {
         super.init(frame: .zero)
@@ -225,28 +222,12 @@ private final class HighlightIconButton: NSButton {
         imageScaling = .scaleNone
         alignment = .center
         contentTintColor = .labelColor
-        image = Self.icon(pointSize: 13)
+        image = NSImage(systemSymbolName: "arrow.triangle.2.circlepath",
+                        accessibilityDescription: "Reconnect")?
+            .withSymbolConfiguration(NSImage.SymbolConfiguration(pointSize: 13, weight: .regular))
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
-
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let tracking { removeTrackingArea(tracking) }
-        let area = NSTrackingArea(rect: .zero,
-                                  options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-                                  owner: self, userInfo: nil)
-        addTrackingArea(area)
-        tracking = area
-    }
-
-    override func mouseEntered(with event: NSEvent) { hovered = true }
-    override func mouseExited(with event: NSEvent) { hovered = false }
-
-    override func viewDidHide() {
-        super.viewDidHide()
-        hovered = false
-    }
 }
 
 /// The floating bar itself.
@@ -339,6 +320,7 @@ final class BarView: NSVisualEffectView {
                 entryButtons[entry.id] = button
             }
             button.isActive = model.isActive(entry)
+            button.isReconnecting = model.isReconnecting(entry)
             button.isBusy = model.isBusy(entry)
             live.insert(entry.id)
             stack.addArrangedSubview(button)
