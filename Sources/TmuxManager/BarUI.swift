@@ -20,8 +20,9 @@ final class EntryButton: NSControl {
     private let title = NSTextField(labelWithString: "")
     private let spinner = NSProgressIndicator()
     private let reconnectButton = ReconnectButton()
-    private var hovered = false { didSet { applyState() } }
+    private var hovered = false
     private var tracking: NSTrackingArea?
+    private var hoverTimer: Timer?
 
     private let height: CGFloat = 26
 
@@ -61,6 +62,8 @@ final class EntryButton: NSControl {
     }
 
     required init?(coder: NSCoder) { fatalError("not supported") }
+
+    deinit { hoverTimer?.invalidate() }
 
     func update(entry: Entry) {
         self.entry = entry
@@ -121,15 +124,23 @@ final class EntryButton: NSControl {
 
     // MARK: - State
 
-    private func applyState() {
-        title.stringValue = labelText
+    private func applyAppearance() {
         if isActive {
-            layer?.backgroundColor = NSColor.systemGreen.withAlphaComponent(hovered ? 0.38 : 0.26).cgColor
+            let backgroundColor = hovered
+                ? (NSColor.systemGreen.blended(withFraction: 0.25, of: .black) ?? .systemGreen)
+                    .withAlphaComponent(0.70)
+                : NSColor.systemGreen.withAlphaComponent(0.26)
+            layer?.backgroundColor = backgroundColor.cgColor
             layer?.borderColor = NSColor.systemGreen.withAlphaComponent(0.85).cgColor
         } else {
             layer?.backgroundColor = NSColor.labelColor.withAlphaComponent(hovered ? 0.16 : 0.08).cgColor
             layer?.borderColor = NSColor.labelColor.withAlphaComponent(0.18).cgColor
         }
+    }
+
+    private func applyState() {
+        title.stringValue = labelText
+        applyAppearance()
         reconnectButton.isHidden = !isActive || showsReconnectSpinner
         reconnectButton.isEnabled = !isBusy
         spinner.isHidden = !isBusy
@@ -144,18 +155,46 @@ final class EntryButton: NSControl {
 
     // MARK: - Events
 
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let tracking { removeTrackingArea(tracking) }
-        let area = NSTrackingArea(rect: bounds,
-                                  options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
-                                  owner: self, userInfo: nil)
-        addTrackingArea(area)
-        tracking = area
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        refreshHoverState()
     }
 
-    override func mouseEntered(with event: NSEvent) { hovered = true }
-    override func mouseExited(with event: NSEvent) { hovered = false }
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if tracking == nil {
+            let area = NSTrackingArea(rect: .zero,
+                                      options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect],
+                                      owner: self, userInfo: nil)
+            addTrackingArea(area)
+            tracking = area
+        }
+        refreshHoverState()
+    }
+
+    private func refreshHoverState() {
+        let isHovered = window.map {
+            $0.isVisible && !isHiddenOrHasHiddenAncestor
+                && visibleRect.contains(convert($0.convertPoint(fromScreen: NSEvent.mouseLocation), from: nil))
+        } ?? false
+        guard hovered != isHovered else { return }
+        hovered = isHovered
+        applyAppearance()
+        hoverTimer?.invalidate()
+        hoverTimer = nil
+        if isHovered {
+            // NSButton tracking and reconnect reloads can swallow mouse-exit events.
+            let timer = Timer(timeInterval: 0.10, repeats: true) { [weak self] _ in
+                self?.refreshHoverState()
+            }
+            timer.tolerance = 0.01
+            RunLoop.main.add(timer, forMode: .common)
+            hoverTimer = timer
+        }
+    }
+
+    override func mouseEntered(with event: NSEvent) { refreshHoverState() }
+    override func mouseExited(with event: NSEvent) { refreshHoverState() }
 
     override func mouseDown(with event: NSEvent) {
         guard !isBusy else { return }
