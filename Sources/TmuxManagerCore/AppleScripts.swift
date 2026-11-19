@@ -23,6 +23,17 @@ public enum AppleScripts {
         return lines.joined(separator: "\n")
     }
 
+    /// Creates one console window running an arbitrary shell command. No frame and no
+    /// wrapper state: the "No tmux" shortcut is a plain, unmanaged window.
+    public static func shellWindow(command: String) -> String {
+        """
+        tell application "iTerm2"
+          set w to create window with profile \(Quote.appleScript(profileName)) command \(Quote.appleScript(command))
+          return id of w as text
+        end tell
+        """
+    }
+
     /// Brings the window owning session `guid` to the front. Returns "true"/"false".
     public static func activateSession(guid: String) -> String {
         guard Validation.isValidGUID(guid) else { return "return \"false\"" }

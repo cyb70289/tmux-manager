@@ -77,6 +77,19 @@ final class CoreTests: XCTestCase {
         XCTAssertTrue(script.contains("set bounds of w to {10, 20, 810, 620}"), script)
     }
 
+    func testShellWindowScriptQuotesCommandAndSetsNoBounds() {
+        let command = "'/usr/bin/ssh' 'cyb@devbox'"
+        let script = AppleScripts.shellWindow(command: command)
+        XCTAssertTrue(script.contains("create window with profile \"TmuxManager\" command \"'/usr/bin/ssh' 'cyb@devbox'\""), script)
+        XCTAssertFalse(script.contains("bounds"), script)
+    }
+
+    func testPlainSSHCommandQuotesOptionsAndIgnoresDetach() {
+        let entry = Entry(host: "cyb@devbox", session: "main", sshOptions: ["-p", "2222"],
+                          detachOtherClients: true)
+        XCTAssertEqual(entry.sshCommand, "'/usr/bin/ssh' '-p' '2222' 'cyb@devbox'")
+    }
+
     func testBoundsLiteralRounds() {
         XCTAssertEqual(AppleScripts.boundsLiteral(Frame(x: 1.4, y: 2.6, w: 10, h: 20)),
                        "{1, 3, 11, 23}")

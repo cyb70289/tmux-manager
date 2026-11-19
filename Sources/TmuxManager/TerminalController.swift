@@ -23,22 +23,44 @@ final class TerminalController {
             let script = AppleScripts.createWindow(attachScript: paths.attachScriptURL.path,
                                                    entryID: entry.id,
                                                    frame: frame)
-            var result = Shell.osascript(script, timeout: 25)
-            if result.status != 0, Self.isMissingProfile(result) {
-                Log.shared.write("iTerm2 lost the TmuxManager profile; rewriting it")
-                ProfileInstaller.install()
-                result = Shell.osascript(script, timeout: 25)
-            }
-            if result.status == 0 {
-                Log.shared.write("created window for \(entry.address)")
-                DispatchQueue.main.async { completion(.success(())) }
-            } else {
-                let message = Self.describe(result, context: "Could not open a console window")
-                Log.shared.write("create window failed: \(message)")
-                DispatchQueue.main.async {
-                    completion(.failure(NSError(domain: "TmuxManager", code: 1,
-                                                userInfo: [NSLocalizedDescriptionKey: message])))
-                }
+            Self.run(script: script,
+                     success: "created window for \(entry.address)",
+                     failureContext: "Could not open a console window",
+                     completion: completion)
+        }
+    }
+
+    /// Plain ssh window for the "No tmux" shortcut: no wrapper, no state file, no frame.
+    func openShellWindow(entry: Entry, completion: @escaping (Result<Void, NSError>) -> Void) {
+        queue.async {
+            Self.ensureITermRunning()
+            let script = AppleScripts.shellWindow(command: entry.sshCommand)
+            Self.run(script: script,
+                     success: "opened plain ssh window for \(entry.address)",
+                     failureContext: "Could not open a plain ssh window",
+                     completion: completion)
+        }
+    }
+
+    private static func run(script: String,
+                            success: String,
+                            failureContext: String,
+                            completion: @escaping (Result<Void, NSError>) -> Void) {
+        var result = Shell.osascript(script, timeout: 25)
+        if result.status != 0, isMissingProfile(result) {
+            Log.shared.write("iTerm2 lost the TmuxManager profile; rewriting it")
+            ProfileInstaller.install()
+            result = Shell.osascript(script, timeout: 25)
+        }
+        if result.status == 0 {
+            Log.shared.write(success)
+            DispatchQueue.main.async { completion(.success(())) }
+        } else {
+            let message = describe(result, context: failureContext)
+            Log.shared.write("create window failed: \(message)")
+            DispatchQueue.main.async {
+                completion(.failure(NSError(domain: "TmuxManager", code: 1,
+                                            userInfo: [NSLocalizedDescriptionKey: message])))
             }
         }
     }

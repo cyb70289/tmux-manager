@@ -16,6 +16,7 @@ final class EntryButton: NSControl {
     var onClose: ((Entry) -> Void)?
     var onEdit: ((Entry) -> Void)?
     var onRemove: ((Entry) -> Void)?
+    var onNoTmux: ((Entry) -> Void)?
 
     private let title = NSTextField(labelWithString: "")
     private let spinner = NSProgressIndicator()
@@ -230,6 +231,12 @@ final class EntryButton: NSControl {
         let remove = NSMenuItem(title: "Remove…", action: #selector(removeFromMenu), keyEquivalent: "")
         remove.target = self
         menu.addItem(remove)
+
+        menu.addItem(.separator())
+        // Shortcut only: creates a plain ssh window, nothing tracked.
+        let noTmux = NSMenuItem(title: "No tmux", action: #selector(noTmuxFromMenu), keyEquivalent: "")
+        noTmux.target = self
+        menu.addItem(noTmux)
         return menu
     }
 
@@ -238,6 +245,7 @@ final class EntryButton: NSControl {
     @objc private func closeFromMenu() { onClose?(entry) }
     @objc private func editFromMenu() { onEdit?(entry) }
     @objc private func removeFromMenu() { onRemove?(entry) }
+    @objc private func noTmuxFromMenu() { onNoTmux?(entry) }
 
     @objc private func reconnectClicked() {
         guard !isBusy else { return }
@@ -356,6 +364,7 @@ final class BarView: NSVisualEffectView {
                 button.onClose = { [weak self] entry in self?.model?.closeConsole(entry) }
                 button.onEdit = { [weak self] entry in self?.editEntry(entry) }
                 button.onRemove = { [weak self] entry in self?.removeEntry(entry) }
+                button.onNoTmux = { [weak self] entry in self?.model?.openNoTmux(entry) }
                 entryButtons[entry.id] = button
             }
             button.isActive = model.isActive(entry)

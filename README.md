@@ -1,6 +1,6 @@
 # TmuxManager
 
-A small macOS bar that keeps a list of `host : tmux session` entries and opens each one in its own iTerm2 window over `ssh`. Click a button to open or raise the console, `⟳` to reconnect without losing the window, right-click to close, edit or remove.
+A small macOS bar that keeps a list of `host : tmux session` entries and opens each one in its own iTerm2 window over `ssh`. Click a button to open or raise the console, `⟳` to reconnect without losing the window, right-click to close, edit or remove, or to get a plain ssh window without tmux.
 
 Typical use: long-lived tmux sessions on a few remote hosts, each one click away. The bar remembers each window's on-screen position/size and reattaches exactly there. It only drives your existing iTerm2 — no new console app, nothing else to keep running.
 
@@ -22,6 +22,7 @@ The first AppleScript call triggers macOS Automation permission for iTerm2. Ad-h
 - Click a button: opens a console, or raises the existing window (de-miniaturizes and switches Space as needed).
 - Gray = no console. Green = console window open. Spinner = opening.
 - Green button shows `⟳`: restarts ssh in the same window. Right-click → activate / reconnect / close / edit / remove.
+- `No tmux` (right-click, bottom) opens a plain `ssh` window to the entry's host. It honors the entry's ssh options and always opens a new window.
 - `Close Console` (right-click, only while the console is open) reads the window's current position/size, saves it immediately, then closes the window. The remote tmux session survives. This is the frame-accurate way to close: unlike the traffic-light `×`, nothing is lost even if the window was moved/resized seconds ago.
 - Removing asks whether to also kill the remote tmux session (unchecked by default).
 - Buttons are ordered by name; the bar is draggable and remembers its position. Its right edge is pinned: adding, editing or opening an entry grows the bar to the left, and it only slides right again when it would no longer fit on screen. Per-entry window frames are captured while a console is open and restored on the next open, clamped to the visible screens.

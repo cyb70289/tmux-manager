@@ -154,6 +154,18 @@ final class AppModel {
         createWindow(for: entry)
     }
 
+    /// Plain ssh to the host in a new iTerm2 window. Deliberately unmanaged: no
+    /// state file, no frame, no capsule state, nothing to clean up.
+    func openNoTmux(_ entry: Entry) {
+        let entry = config.entry(id: entry.id) ?? entry
+        controller.openShellWindow(entry: entry) { [weak self] result in
+            guard let self else { return }
+            if case .failure(let error) = result {
+                self.show(error: error.localizedDescription)
+            }
+        }
+    }
+
     private func createWindow(for entry: Entry) {
         // Defensive: callers serialize on the main thread, but the activate
         // completion above can land here twice for one double-click.
