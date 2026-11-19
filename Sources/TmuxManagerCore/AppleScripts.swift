@@ -24,7 +24,7 @@ public enum AppleScripts {
     }
 
     /// Creates one console window running an arbitrary shell command. No frame and no
-    /// wrapper state: the "No tmux" shortcut is a plain, unmanaged window.
+    /// wrapper state: the "Plain SSH" shortcut is a plain, unmanaged window.
     public static func shellWindow(command: String) -> String {
         """
         tell application "iTerm2"

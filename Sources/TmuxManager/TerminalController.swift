@@ -30,11 +30,11 @@ final class TerminalController {
         }
     }
 
-    /// Plain ssh window for the "No tmux" shortcut: no wrapper, no state file, no frame.
+    /// Plain ssh window for the "Plain SSH" shortcut: no wrapper, no state file, no frame.
     func openShellWindow(entry: Entry, completion: @escaping (Result<Void, NSError>) -> Void) {
         queue.async {
             Self.ensureITermRunning()
-            let script = AppleScripts.shellWindow(command: entry.sshCommand)
+            let script = AppleScripts.shellWindow(command: entry.plainSSHCommand)
             Self.run(script: script,
                      success: "opened plain ssh window for \(entry.address)",
                      failureContext: "Could not open a plain ssh window",

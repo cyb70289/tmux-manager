@@ -156,7 +156,7 @@ final class AppModel {
 
     /// Plain ssh to the host in a new iTerm2 window. Deliberately unmanaged: no
     /// state file, no frame, no capsule state, nothing to clean up.
-    func openNoTmux(_ entry: Entry) {
+    func openPlainSSH(_ entry: Entry) {
         let entry = config.entry(id: entry.id) ?? entry
         controller.openShellWindow(entry: entry) { [weak self] result in
             guard let self else { return }

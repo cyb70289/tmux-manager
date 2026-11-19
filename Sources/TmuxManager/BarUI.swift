@@ -16,7 +16,7 @@ final class EntryButton: NSControl {
     var onClose: ((Entry) -> Void)?
     var onEdit: ((Entry) -> Void)?
     var onRemove: ((Entry) -> Void)?
-    var onNoTmux: ((Entry) -> Void)?
+    var onPlainSSH: ((Entry) -> Void)?
 
     private let title = NSTextField(labelWithString: "")
     private let spinner = NSProgressIndicator()
@@ -205,25 +205,18 @@ final class EntryButton: NSControl {
 
     override func menu(for event: NSEvent) -> NSMenu? {
         let menu = NSMenu()
-        let open = NSMenuItem(title: isActive ? "Activate Window" : "Open Console",
-                              action: #selector(openFromMenu), keyEquivalent: "")
-        open.target = self
-        open.isEnabled = !isBusy
-        menu.addItem(open)
-
-        let reconnect = NSMenuItem(title: "Force Reconnect", action: #selector(reconnectFromMenu),
-                                   keyEquivalent: "")
-        reconnect.target = self
-        reconnect.isEnabled = isActive && !isBusy
-        menu.addItem(reconnect)
-
-        menu.addItem(.separator())
-        let close = NSMenuItem(title: "Close Console", action: #selector(closeFromMenu), keyEquivalent: "")
+        let close = NSMenuItem(title: "Close", action: #selector(closeFromMenu), keyEquivalent: "")
         close.target = self
         close.isEnabled = isActive && !isBusy
         menu.addItem(close)
-        menu.addItem(.separator())
 
+        menu.addItem(.separator())
+        // Shortcut only: creates a plain ssh window, nothing tracked.
+        let plainSSH = NSMenuItem(title: "Plain SSH", action: #selector(plainSSHFromMenu), keyEquivalent: "")
+        plainSSH.target = self
+        menu.addItem(plainSSH)
+
+        menu.addItem(.separator())
         let edit = NSMenuItem(title: "Edit…", action: #selector(editFromMenu), keyEquivalent: "")
         edit.target = self
         menu.addItem(edit)
@@ -231,21 +224,13 @@ final class EntryButton: NSControl {
         let remove = NSMenuItem(title: "Remove…", action: #selector(removeFromMenu), keyEquivalent: "")
         remove.target = self
         menu.addItem(remove)
-
-        menu.addItem(.separator())
-        // Shortcut only: creates a plain ssh window, nothing tracked.
-        let noTmux = NSMenuItem(title: "No tmux", action: #selector(noTmuxFromMenu), keyEquivalent: "")
-        noTmux.target = self
-        menu.addItem(noTmux)
         return menu
     }
 
-    @objc private func openFromMenu() { onOpen?(entry) }
-    @objc private func reconnectFromMenu() { onReconnect?(entry) }
     @objc private func closeFromMenu() { onClose?(entry) }
     @objc private func editFromMenu() { onEdit?(entry) }
     @objc private func removeFromMenu() { onRemove?(entry) }
-    @objc private func noTmuxFromMenu() { onNoTmux?(entry) }
+    @objc private func plainSSHFromMenu() { onPlainSSH?(entry) }
 
     @objc private func reconnectClicked() {
         guard !isBusy else { return }
@@ -364,7 +349,7 @@ final class BarView: NSVisualEffectView {
                 button.onClose = { [weak self] entry in self?.model?.closeConsole(entry) }
                 button.onEdit = { [weak self] entry in self?.editEntry(entry) }
                 button.onRemove = { [weak self] entry in self?.removeEntry(entry) }
-                button.onNoTmux = { [weak self] entry in self?.model?.openNoTmux(entry) }
+                button.onPlainSSH = { [weak self] entry in self?.model?.openPlainSSH(entry) }
                 entryButtons[entry.id] = button
             }
             button.isActive = model.isActive(entry)

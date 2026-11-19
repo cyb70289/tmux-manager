@@ -21,9 +21,9 @@ The first AppleScript call triggers macOS Automation permission for iTerm2. Ad-h
 - `+` adds an entry (name, ssh host, tmux session, optional tmux path / extra ssh options / `-D`). Saving runs an advisory check: can we ssh and is tmux installed? A failure warns but never blocks saving.
 - Click a button: opens a console, or raises the existing window (de-miniaturizes and switches Space as needed).
 - Gray = no console. Green = console window open. Spinner = opening.
-- Green button shows `⟳`: restarts ssh in the same window. Right-click → activate / reconnect / close / edit / remove.
-- `No tmux` (right-click, bottom) opens a plain `ssh` window to the entry's host. It honors the entry's ssh options and always opens a new window.
-- `Close Console` (right-click, only while the console is open) reads the window's current position/size, saves it immediately, then closes the window. The remote tmux session survives. This is the frame-accurate way to close: unlike the traffic-light `×`, nothing is lost even if the window was moved/resized seconds ago.
+- Green button shows `⟳`: restarts ssh in the same window. Right-click → close / plain ssh / edit / remove; opening and reconnecting are on the button itself.
+- `Plain SSH` (right-click) opens a plain `ssh` window to the entry's host. It honors the entry's ssh options and always opens a new window.
+- `Close` (right-click, only while the console is open) reads the window's current position/size, saves it immediately, then closes the window. The remote tmux session survives. This is the frame-accurate way to close: unlike the traffic-light `×`, nothing is lost even if the window was moved/resized seconds ago.
 - Removing asks whether to also kill the remote tmux session (unchecked by default).
 - Buttons are ordered by name; the bar is draggable and remembers its position. Its right edge is pinned: adding, editing or opening an entry grows the bar to the left, and it only slides right again when it would no longer fit on screen. Per-entry window frames are captured while a console is open and restored on the next open, clamped to the visible screens.
 
@@ -52,7 +52,7 @@ Liveness is therefore file-based: the app treats an entry as open when its state
 
 ### Frames
 
-While any console is open, the app polls iTerm2 for window bounds in-process (`NSAppleScript`, `frame_capture_interval_seconds`, default 30 s) and persists changed frames to config (debounced, plus on activate/reconnect/quit). `Close Console` captures and saves the frame at the instant of closing, so it does not depend on the poll. Restore clamps frames to `NSScreen.visibleFrame` — a frame that is less than 25 % visible is moved onto the nearest screen.
+While any console is open, the app polls iTerm2 for window bounds in-process (`NSAppleScript`, `frame_capture_interval_seconds`, default 30 s) and persists changed frames to config (debounced, plus on activate/reconnect/quit). `Close` captures and saves the frame at the instant of closing, so it does not depend on the poll. Restore clamps frames to `NSScreen.visibleFrame` — a frame that is less than 25 % visible is moved onto the nearest screen.
 
 ### iTerm2 profile
 

@@ -114,9 +114,9 @@ public struct Entry: Codable, Equatable, Identifiable {
         return defaultDisplayName
     }
 
-    /// Plain interactive ssh to the host, for the "No tmux" menu shortcut. Every
+    /// Plain interactive ssh to the host, for the "Plain SSH" menu shortcut. Every
     /// token is shell-quoted; `-D` is tmux-only and deliberately not applied.
-    public var sshCommand: String {
+    public var plainSSHCommand: String {
         (["/usr/bin/ssh"] + sshOptions + [host]).map(Quote.shell).joined(separator: " ")
     }
 

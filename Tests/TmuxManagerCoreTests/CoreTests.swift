@@ -87,7 +87,7 @@ final class CoreTests: XCTestCase {
     func testPlainSSHCommandQuotesOptionsAndIgnoresDetach() {
         let entry = Entry(host: "cyb@devbox", session: "main", sshOptions: ["-p", "2222"],
                           detachOtherClients: true)
-        XCTAssertEqual(entry.sshCommand, "'/usr/bin/ssh' '-p' '2222' 'cyb@devbox'")
+        XCTAssertEqual(entry.plainSSHCommand, "'/usr/bin/ssh' '-p' '2222' 'cyb@devbox'")
     }
 
     func testBoundsLiteralRounds() {
