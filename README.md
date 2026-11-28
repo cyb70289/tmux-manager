@@ -6,6 +6,8 @@ Typical use: long-lived tmux sessions on a few remote hosts, each one click away
 
 Requirements: macOS 13+, iTerm2, system `ssh`, `tmux` on the remote host. No other dependencies — the app shells out to `ssh` and drives iTerm2 with AppleScript.
 
+For Linux X11 + WezTerm (Ubuntu 22.04), see [`linux-x11/README.md`](linux-x11/README.md).
+
 ## Build and run
 
 ```sh
