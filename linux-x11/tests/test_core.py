@@ -246,7 +246,7 @@ class CoreTests(unittest.TestCase):
             model.start()
 
             entry = Entry(id="e-open", host="host1", session="s1")
-            self.assertTrue(model.add(entry, then_probe=False))
+            self.assertTrue(model.add(entry))
 
             # First open creates a new window.
             model.open(entry)

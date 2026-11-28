@@ -20,7 +20,7 @@ The first AppleScript call triggers macOS Automation permission for iTerm2. Ad-h
 
 ## Use
 
-- `+` adds an entry (name, ssh host, tmux session, optional tmux path / extra ssh options / `-D`). Saving runs an advisory check: can we ssh and is tmux installed? A failure warns but never blocks saving.
+- `+` adds an entry (name, ssh host, tmux session, optional tmux path / extra ssh options / `-D`).
 - Click a button: opens a console, or raises the existing window (de-miniaturizes and switches Space as needed).
 - Gray = no console. Green = console window open. Spinner = opening.
 - Green button shows `⟳`: restarts ssh in the same window. Right-click → close / plain ssh / edit / remove; opening and reconnecting are on the button itself.

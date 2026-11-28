@@ -32,7 +32,7 @@ final class DebugHook {
         }
         if action == "add", let json = info["json"], let data = json.data(using: .utf8),
            let entry = try? JSONDecoder().decode(Entry.self, from: data) {
-            _ = model.add(entry, thenProbe: true)
+            _ = model.add(entry)
             return
         }
         if action == "sheet" || action == "editor" {

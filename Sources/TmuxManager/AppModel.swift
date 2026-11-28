@@ -276,7 +276,7 @@ final class AppModel {
         onChange?()
     }
 
-    func add(_ entry: Entry, thenProbe: Bool = true) -> Bool {
+    func add(_ entry: Entry) -> Bool {
         if let message = EntryValidator.message(for: EntryValidator.problems(for: entry, all: config.entries)) {
             show(error: message)
             return false
@@ -284,9 +284,6 @@ final class AppModel {
         config.entries.append(entry)
         save()
         onChange?()
-        if thenProbe {
-            probe(entry: entry, alertOnFailure: true)
-        }
         return true
     }
 
@@ -343,45 +340,17 @@ final class AppModel {
     }
 
     private func killRemote(_ entry: Entry) {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+        DispatchQueue.global(qos: .userInitiated).async {
             var args = ["-o", "BatchMode=yes", "-o", "ConnectTimeout=10"]
             args += entry.sshOptions
             args += [entry.host, "\(entry.effectiveTmuxPath) kill-session -t \(Quote.shell(entry.session))"]
             let result = Shell.run("/usr/bin/ssh", args, timeout: 30)
-            DispatchQueue.main.async {
-                if result.status == 0 {
-                    Log.shared.write("killed remote session \(entry.address)")
-                } else {
-                    let text = result.combined
-                    self?.show(error: "Could not kill remote session \(entry.address): "
-                               + (text.isEmpty ? "ssh exited \(result.status)" : text))
-                }
-            }
-        }
-    }
-
-    func probe(entry: Entry, alertOnFailure: Bool) {
-        DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-            let result = SSHProbe.check(host: entry.host, sshOptions: entry.sshOptions)
-            DispatchQueue.main.async {
-                Log.shared.write("probe \(entry.host): \(result.summary)")
-                guard alertOnFailure, let self else { return }
-                switch result.kind {
-                case .failed:
-                    let alert = NSAlert()
-                    alert.messageText = "Saved, but the connection test failed"
-                    alert.informativeText = "\(entry.displayName): \(result.summary)"
-                    alert.alertStyle = .warning
-                    alert.addButton(withTitle: "Keep Entry")
-                    alert.addButton(withTitle: "Remove Entry")
-                    if alert.runModal() == .alertSecondButtonReturn {
-                        self.remove(entry, killRemoteSession: false)
-                    }
-                case .tmuxMissing:
-                    self.show(error: "\(entry.displayName): connected, but tmux was not found on \(entry.host).")
-                case .unverified, .ok:
-                    break
-                }
+            if result.status == 0 {
+                Log.shared.write("killed remote session \(entry.address)")
+            } else {
+                let text = result.combined
+                Log.shared.write("could not kill remote session \(entry.address): "
+                                 + (text.isEmpty ? "ssh exited \(result.status)" : text))
             }
         }
     }

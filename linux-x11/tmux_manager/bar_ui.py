@@ -278,7 +278,6 @@ class BarWindow(Gtk.Window):
         self._build_layout()
 
         self.model.on_change = self._on_model_changed
-        self.model.on_probe_failed = self._on_probe_failed
 
     @staticmethod
     def _install_css() -> None:
@@ -412,24 +411,6 @@ class BarWindow(Gtk.Window):
         dialog.destroy()
         if response == Gtk.ResponseType.OK:
             self.model.remove(entry, kill_remote_session=kill_remote)
-
-    def _on_probe_failed(self, entry: Entry, summary: str) -> None:
-        dialog = Gtk.MessageDialog(
-            transient_for=None,
-            flags=0,
-            message_type=Gtk.MessageType.WARNING,
-            buttons=Gtk.ButtonsType.NONE,
-            text="Saved, but the connection test failed",
-        )
-        dialog.set_keep_above(True)
-        dialog.format_secondary_text(f"{entry.display_name}: {summary}")
-        dialog.add_button("Keep Entry", Gtk.ResponseType.OK)
-        dialog.add_button("Remove Entry", Gtk.ResponseType.REJECT)
-        dialog.set_default_response(Gtk.ResponseType.OK)
-        response = dialog.run()
-        dialog.destroy()
-        if response == Gtk.ResponseType.REJECT:
-            self.model.remove(entry, kill_remote_session=False)
 
     # MARK: - Row updates & geometry
 

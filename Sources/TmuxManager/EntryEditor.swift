@@ -248,7 +248,7 @@ final class EntryEditor: NSObject, NSWindowDelegate {
             return
         }
         if original == nil {
-            guard model.add(entry, thenProbe: true) else { return }
+            guard model.add(entry) else { return }
         } else {
             guard model.update(entry) else { return }
         }

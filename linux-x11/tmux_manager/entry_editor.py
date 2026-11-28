@@ -261,7 +261,7 @@ class EntryEditor:
             self._set_status(msg, "#e5534b")
             return
         if self.original is None:
-            if not self.model.add(entry, then_probe=True):
+            if not self.model.add(entry):
                 return
         else:
             if not self.model.update(entry):

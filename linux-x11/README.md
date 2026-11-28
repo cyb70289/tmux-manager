@@ -16,7 +16,7 @@ Launching `tmux-manager` while already running raises the existing bar.
 
 ## Use
 
-- `+` (or `Ctrl+N`) adds an entry (`Name`, `SSH host`, `tmux session`, optional `tmux path` / `Extra ssh options` / `-D`). Saving runs an advisory ssh + tmux check that warns on failure without blocking.
+- `+` (or `Ctrl+N`) adds an entry (`Name`, `SSH host`, `tmux session`, optional `tmux path` / `Extra ssh options` / `-D`).
 - Click a gray pill to open a WezTerm console, or a green pill to raise/unminimize the existing window (switching workspace if needed). Spinner = opening or reconnecting.
 - Green pill shows `⟳`: restarts `ssh` in the same window. Right-click → `Close` / `Plain SSH` / `Edit…` / `Remove…`.
 - `Plain SSH` opens an unmanaged WezTerm window running `ssh` to the entry's host with its `ssh_options`.

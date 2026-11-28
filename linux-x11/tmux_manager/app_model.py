@@ -19,7 +19,7 @@ from .config_store import ConfigStore
 from .frame_clamp import clamp_frame
 from .log import LOG, install_wrapper
 from .paths import Paths
-from .shell import ProbeResult, probe_ssh, run_command
+from .shell import run_command
 from .state_store import StateStore, WrapperState
 from .terminal_controller import TerminalController
 
@@ -105,7 +105,6 @@ class AppModel:
         self._last_config_stamp: Optional[Tuple[int, int, int]] = None
 
         self.on_change: Optional[Callable[[], None]] = None
-        self.on_probe_failed: Optional[Callable[[Entry, str], None]] = None
 
         res = self.config_store.load()
         if res.status == "loaded" and res.config is not None:
@@ -319,7 +318,7 @@ class AppModel:
         self.busy.discard(entry_id)
         self._notify()
 
-    def add(self, entry: Entry, then_probe: bool = True) -> bool:
+    def add(self, entry: Entry) -> bool:
         msg = validation_message(validate_entry(entry, self.config.entries))
         if msg:
             self.show_error(msg)
@@ -327,8 +326,6 @@ class AppModel:
         self.config.entries.append(entry)
         self.save()
         self._notify()
-        if then_probe:
-            self.probe(entry, alert_on_failure=True)
         return True
 
     def update(self, entry: Entry) -> bool:
@@ -405,39 +402,11 @@ class AppModel:
                 remote_cmd,
             ]
             result = run_command(argv, timeout=30.0)
-
-            def _finish() -> None:
-                if result.status == 0:
-                    LOG.write(f"killed remote session {entry.address}")
-                else:
-                    text = result.combined or f"ssh exited {result.status}"
-                    self.show_error(
-                        f"Could not kill remote session {entry.address}: {text}"
-                    )
-
-            self._sched.call_main(_finish)
-
-        threading.Thread(target=_worker, daemon=True).start()
-
-    def probe(self, entry: Entry, alert_on_failure: bool) -> None:
-        def _worker() -> None:
-            result = probe_ssh(entry.host, entry.ssh_options)
-
-            def _finish() -> None:
-                LOG.write(f"probe {entry.host}: {result.summary}")
-                if not alert_on_failure:
-                    return
-                if result.kind == "failed":
-                    if self.on_probe_failed is not None:
-                        self.on_probe_failed(entry, result.summary)
-                    else:
-                        self.show_error(f"{entry.display_name}: {result.summary}")
-                elif result.kind == "tmux_missing":
-                    self.show_error(
-                        f"{entry.display_name}: connected, but tmux was not found on {entry.host}."
-                    )
-
-            self._sched.call_main(_finish)
+            if result.status == 0:
+                LOG.write(f"killed remote session {entry.address}")
+            else:
+                text = result.combined or f"ssh exited {result.status}"
+                LOG.write(f"could not kill remote session {entry.address}: {text}")
 
         threading.Thread(target=_worker, daemon=True).start()
 

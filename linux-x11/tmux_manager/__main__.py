@@ -61,7 +61,7 @@ def _handle_debug_command(
         return {"ok": True}
     if action == "add" and isinstance(msg.get("entry"), dict):
         entry = Entry.from_dict(msg["entry"])
-        ok = model.add(entry, then_probe=bool(msg.get("probe", True)))
+        ok = model.add(entry)
         return {"ok": ok, "id": entry.id}
     if action == "editor":
         bar.add_entry()
